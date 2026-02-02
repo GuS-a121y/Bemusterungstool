@@ -1,6 +1,6 @@
 name = "gs-bemusterungstool"
 main = "worker.js"
-compatibility_date = "2024-01-01"
+compatibility_date = "2025-01-01"
 
 # D1 Database Binding
 [[d1_databases]]
@@ -8,9 +8,9 @@ binding = "DB"
 database_name = "bemusterungstool"
 database_id = "696ecc2e-d9a5-4be6-9f3f-646c8928243f" # Wird nach Erstellung eingetragen
 
-# Assets (Frontend)
-[site]
-bucket = "./public"
+
+[assets]
+directory = "public"
 
 # Umgebungsvariablen (optional)
 [vars]
