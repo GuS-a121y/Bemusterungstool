@@ -1,4 +1,4 @@
-name = "gs-bemusterungstool"
+name = "bemusterungstool"
 main = "worker.js"
 compatibility_date = "2025-01-01"
 
