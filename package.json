@@ -1,0 +1,20 @@
+{
+  "name": "gs-bemusterungstool-cloudflare",
+  "version": "4.0.0",
+  "description": "G+S Bemusterungstool auf Cloudflare Workers + D1",
+  "main": "worker.js",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:create": "wrangler d1 create bemusterungstool",
+    "db:init": "wrangler d1 execute bemusterungstool --file=./schema.sql",
+    "db:query": "wrangler d1 execute bemusterungstool --command",
+    "tail": "wrangler tail"
+  },
+  "keywords": ["cloudflare", "workers", "d1", "bemusterung"],
+  "author": "G+S Gruppe",
+  "license": "PROPRIETARY",
+  "devDependencies": {
+    "wrangler": "^3.22.0"
+  }
+}
