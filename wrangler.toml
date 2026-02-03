@@ -5,7 +5,7 @@ pages_build_output_dir = "./dist"
 [[d1_databases]]
 binding = "DB"
 database_name = "bemusterung-db"
-database_id = "YOUR_DATABASE_ID_HERE"
+database_id = "b0784d43-3ad3-42f8-b378-aef31f182400"
 
 # Für lokale Entwicklung:
 # wrangler d1 create bemusterung-db
