@@ -67,6 +67,31 @@ CREATE TABLE IF NOT EXISTS selections (
     UNIQUE(apartment_id, category_id)
 );
 
+-- Ausgeblendete Optionen pro Wohnung
+CREATE TABLE IF NOT EXISTS apartment_hidden_options (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    apartment_id INTEGER NOT NULL,
+    option_id INTEGER NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (apartment_id) REFERENCES apartments(id) ON DELETE CASCADE,
+    FOREIGN KEY (option_id) REFERENCES options(id) ON DELETE CASCADE,
+    UNIQUE(apartment_id, option_id)
+);
+
+-- Individuelle Optionen pro Wohnung
+CREATE TABLE IF NOT EXISTS apartment_custom_options (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    apartment_id INTEGER NOT NULL,
+    category_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    description TEXT,
+    price REAL DEFAULT 0,
+    image_url TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (apartment_id) REFERENCES apartments(id) ON DELETE CASCADE,
+    FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE
+);
+
 -- Indizes für bessere Performance
 CREATE INDEX IF NOT EXISTS idx_apartments_project ON apartments(project_id);
 CREATE INDEX IF NOT EXISTS idx_apartments_code ON apartments(access_code);

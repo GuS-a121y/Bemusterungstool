@@ -1,6 +1,6 @@
 // API: Kundendaten für Bemusterung
 // GET /api/customer/[code] - Daten laden
-// POST /api/customer/[code]/submit - Auswahl absenden
+// POST /api/customer/[code] - Auswahl absenden
 
 export async function onRequestGet(context) {
   const { params, env } = context
@@ -26,6 +26,19 @@ export async function onRequestGet(context) {
       return Response.json({ error: 'Wohnung nicht gefunden' }, { status: 404 })
     }
 
+    // Ausgeblendete Optionen für diese Wohnung laden
+    const hiddenResult = await env.DB.prepare(`
+      SELECT option_id FROM apartment_hidden_options WHERE apartment_id = ?
+    `).bind(apartment.id).all()
+    const hiddenIds = hiddenResult.results.map(h => h.option_id)
+
+    // Individuelle Optionen für diese Wohnung laden
+    const customResult = await env.DB.prepare(`
+      SELECT id, category_id, name, description, price, image_url
+      FROM apartment_custom_options 
+      WHERE apartment_id = ?
+    `).bind(apartment.id).all()
+
     // Kategorien für das Projekt laden
     const categoriesResult = await env.DB.prepare(`
       SELECT id, name, description, sort_order
@@ -34,7 +47,7 @@ export async function onRequestGet(context) {
       ORDER BY sort_order ASC
     `).bind(apartment.project_id).all()
 
-    // Optionen für alle Kategorien laden
+    // Optionen für alle Kategorien laden (ohne ausgeblendete)
     const categories = []
     for (const cat of categoriesResult.results) {
       const optionsResult = await env.DB.prepare(`
@@ -44,10 +57,30 @@ export async function onRequestGet(context) {
         ORDER BY sort_order ASC
       `).bind(cat.id).all()
 
-      categories.push({
-        ...cat,
-        options: optionsResult.results
-      })
+      // Standard-Optionen filtern (ausgeblendete entfernen)
+      const filteredOptions = optionsResult.results.filter(o => !hiddenIds.includes(o.id))
+
+      // Individuelle Optionen für diese Kategorie hinzufügen
+      const customOptions = customResult.results
+        .filter(co => co.category_id === cat.id)
+        .map(co => ({
+          ...co,
+          id: `custom_${co.id}`,
+          custom_id: co.id,
+          is_custom: true,
+          is_default: 0,
+          sort_order: 999
+        }))
+
+      const allOptions = [...filteredOptions, ...customOptions]
+
+      // Nur Kategorien mit mindestens einer Option anzeigen
+      if (allOptions.length > 0) {
+        categories.push({
+          ...cat,
+          options: allOptions
+        })
+      }
     }
 
     // Bestehende Auswahl laden (falls vorhanden)
@@ -118,10 +151,16 @@ export async function onRequestPost(context) {
 
     // Auswahl speichern
     for (const [categoryId, optionId] of Object.entries(selections)) {
+      // Prüfen ob es eine individuelle Option ist (custom_123 Format)
+      let finalOptionId = optionId
+      if (typeof optionId === 'string' && optionId.startsWith('custom_')) {
+        finalOptionId = parseInt(optionId.replace('custom_', '')) * -1 // Negativ markieren
+      }
+      
       await env.DB.prepare(`
         INSERT OR REPLACE INTO selections (apartment_id, category_id, option_id, selected_at)
         VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-      `).bind(apartment.id, parseInt(categoryId), parseInt(optionId)).run()
+      `).bind(apartment.id, parseInt(categoryId), finalOptionId).run()
     }
 
     // Status aktualisieren

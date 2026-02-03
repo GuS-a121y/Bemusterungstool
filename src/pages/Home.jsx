@@ -20,7 +20,6 @@ function Home() {
     setLoading(true)
     
     try {
-      // API-Aufruf um Code zu validieren
       const response = await fetch(`/api/validate-code?code=${encodeURIComponent(code.trim().toUpperCase())}`)
       const data = await response.json()
       
@@ -30,8 +29,7 @@ function Home() {
         setError('Ungültiger Zugangscode. Bitte überprüfen Sie Ihre Eingabe.')
       }
     } catch (err) {
-      // Im Demo-Modus: Direkt weiterleiten wenn API nicht verfügbar
-      navigate(`/kunde/${code.trim().toUpperCase()}`)
+      setError('Verbindungsfehler. Bitte versuchen Sie es erneut.')
     } finally {
       setLoading(false)
     }

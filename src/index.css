@@ -647,15 +647,17 @@ tr:hover td {
 }
 
 .option-price.included {
-  color: var(--success);
+  color: var(--gray-700);
 }
 
 .option-price.extra {
-  color: var(--gs-red);
+  color: var(--gray-900);
+  font-weight: 600;
 }
 
 .option-price.discount {
-  color: var(--info);
+  color: var(--gray-900);
+  font-weight: 600;
 }
 
 .wizard-footer {
