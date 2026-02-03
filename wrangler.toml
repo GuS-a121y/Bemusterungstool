@@ -1,15 +1,32 @@
+# Wrangler Konfiguration für Bemusterungstool
+# =============================================
+# 
+# SETUP-ANLEITUNG:
+# 
+# 1. D1 Datenbank erstellen:
+#    wrangler d1 create bemusterung-db
+#    (Kopiere die database_id in diese Datei)
+#
+# 2. R2 Bucket erstellen:
+#    wrangler r2 bucket create bemusterung-images
+#
+# 3. Datenbank Schema anwenden:
+#    wrangler d1 execute bemusterung-db --file=./schema.sql
+#
+# 4. Deployen:
+#    npm run build
+#    wrangler pages deploy dist
+
 name = "bemusterung-app"
 compatibility_date = "2024-01-01"
-pages_build_output_dir = "./dist"
 
+# D1 Datenbank Binding
 [[d1_databases]]
 binding = "DB"
 database_name = "bemusterung-db"
-database_id = "b0784d43-3ad3-42f8-b378-aef31f182400"
+database_id = "e27dbc9f-45b3-4006-8f9f-512395a1fabb"  # Nach 'wrangler d1 create' hier eintragen
 
-# Für lokale Entwicklung:
-# wrangler d1 create bemusterung-db
-# Dann die database_id oben ersetzen
-
-[vars]
-ENVIRONMENT = "production"
+# R2 Bucket für Bilder
+[[r2_buckets]]
+binding = "IMAGES"
+bucket_name = "bemusterung-images"

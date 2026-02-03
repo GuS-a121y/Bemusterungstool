@@ -1,125 +1,162 @@
-# GS Gruppe Bemusterungstool
+# Bemusterungstool - G&S Gruppe
 
-Digitale Webapp für die Wohnungsausstattungswahl.
+Digitales Bemusterungssystem für Wohnungsausstattung. Ermöglicht Kunden die Online-Auswahl von Ausstattungsoptionen für ihre neue Wohnung.
 
 ## Features
 
-- **Admin-Bereich**: Projekte, Wohnungen und Bemusterungsoptionen verwalten
-- **Kunden-Wizard**: Schrittweise Ausstattungswahl mit Preisübersicht
-- **PDF-Export**: Automatische Generierung der Bemusterungsbestätigung
-- **DSGVO-konform**: Cloudflare D1 mit EU-Hosting
+### Admin-Dashboard
+- Projekte verwalten (Bauprojekte/Wohnanlagen)
+- Wohnungen anlegen mit automatischer Code-Generierung
+- Bemusterungskategorien definieren (Bodenbeläge, Sanitär, Elektro, etc.)
+- Ausstattungsoptionen mit Bildern und Preisen pflegen
+- Übersicht aller Bemusterungen und deren Status
+- Excel-Export aller Entscheidungen
 
-## Tech-Stack
+### Kunden-Wizard
+- Schrittweise Auswahl durch alle Kategorien
+- Bildvorschau und Preisanzeige
+- Dynamische Gesamtpreisberechnung
+- Verbindliche Abgabe der Auswahl
 
-- Frontend: React + TypeScript + Tailwind CSS
-- Backend: Cloudflare Pages Functions
-- Datenbank: Cloudflare D1 (SQLite)
-- PDF: jsPDF
+## Tech Stack
 
-## Deployment auf Cloudflare
+- **Frontend:** React + Vite
+- **Backend:** Cloudflare Pages Functions (Workers)
+- **Datenbank:** Cloudflare D1 (SQLite)
+- **Bildspeicher:** Cloudflare R2
 
-### 1. Repository erstellen
+## Installation & Deployment
+
+### Voraussetzungen
+
+- Node.js 18+
+- Cloudflare Account
+- Wrangler CLI (`npm install -g wrangler`)
+
+### 1. Repository klonen
 
 ```bash
+git clone <repository-url>
 cd bemusterung-app
-git init
-git add .
-git commit -m "Initial commit"
+npm install
 ```
 
-Pushen Sie zu GitHub/GitLab.
-
-### 2. D1 Datenbank erstellen
+### 2. Cloudflare Ressourcen erstellen
 
 ```bash
-# Cloudflare CLI installieren (falls nicht vorhanden)
-npm install -g wrangler
-
-# Bei Cloudflare anmelden
+# Bei Cloudflare einloggen
 wrangler login
 
-# Datenbank erstellen
+# D1 Datenbank erstellen
 wrangler d1 create bemusterung-db
 
-# Die ausgegebene database_id in wrangler.toml eintragen!
+# R2 Bucket erstellen
+wrangler r2 bucket create bemusterung-images
 ```
 
-### 3. wrangler.toml anpassen
+### 3. Konfiguration anpassen
 
-Ersetzen Sie `YOUR_DATABASE_ID_HERE` mit der echten Database-ID:
+Bearbeite `wrangler.toml` und trage die D1 Database-ID ein:
 
 ```toml
 [[d1_databases]]
 binding = "DB"
 database_name = "bemusterung-db"
-database_id = "ihre-echte-id-hier"
+database_id = "DEINE_DATABASE_ID_HIER"  # ← Hier eintragen
 ```
 
-### 4. Datenbank-Schema anwenden
+### 4. Datenbank-Schema erstellen
 
 ```bash
-# Lokal testen
-wrangler d1 execute bemusterung-db --local --file=./migrations/0001_initial_schema.sql
+# Schema anwenden (mit Testdaten)
+wrangler d1 execute bemusterung-db --file=./schema.sql
 
-# Produktiv
-wrangler d1 execute bemusterung-db --remote --file=./migrations/0001_initial_schema.sql
+# Oder ohne Testdaten (nur Struktur)
+wrangler d1 execute bemusterung-db --file=./schema-clean.sql
 ```
 
-### 5. Cloudflare Pages verbinden
-
-1. Gehen Sie zu [Cloudflare Dashboard](https://dash.cloudflare.com)
-2. Workers & Pages → Create Application → Pages
-3. Connect to Git → Repository auswählen
-4. Build settings:
-   - Framework preset: `None`
-   - Build command: `npm run build`
-   - Build output directory: `dist`
-5. Environment variables: Keine benötigt
-6. D1 Database binding hinzufügen:
-   - Variable name: `DB`
-   - D1 database: `bemusterung-db`
-
-### 6. Deploy
-
-Jeder Push zu `main` deployed automatisch.
-
-## Lokale Entwicklung
+### 5. Lokal entwickeln
 
 ```bash
-# Dependencies installieren
-npm install
-
 # Entwicklungsserver starten
 npm run dev
 
-# Mit D1 lokal testen
-npm run pages:dev
+# Mit D1 und R2 Bindings (Preview)
+wrangler pages dev dist --d1=bemusterung-db --r2=bemusterung-images
 ```
 
-## Demo-Zugangsdaten
+### 6. Deployment
 
-- **Admin-Login**: admin@gs-gruppe.de / demo123
-- **Kunden-Link**: /bemusterung/ABC123 (nach Erstellung einer Wohnung)
+```bash
+# Build erstellen
+npm run build
+
+# Zu Cloudflare Pages deployen
+wrangler pages deploy dist
+```
 
 ## Projektstruktur
 
 ```
 bemusterung-app/
 ├── src/
-│   ├── components/     # Wiederverwendbare Komponenten
-│   ├── pages/          # Seiten-Komponenten
-│   ├── lib/            # API-Client, Typen, Utilities
-│   └── styles/         # Globale Styles
+│   ├── components/     # React-Komponenten
+│   ├── pages/          # Seiten (Home, Admin, Customer)
+│   ├── lib/            # Hilfsfunktionen
+│   ├── App.jsx         # Haupt-App
+│   ├── main.jsx        # Entry Point
+│   └── index.css       # Globale Styles
 ├── functions/
-│   └── api/            # Cloudflare Functions (Backend)
-├── migrations/         # SQL-Schemas
-├── public/             # Statische Assets (Logo)
-└── wrangler.toml       # Cloudflare Konfiguration
+│   └── api/            # Cloudflare Pages Functions
+│       ├── projects.js
+│       ├── apartments.js
+│       ├── categories.js
+│       ├── options.js
+│       ├── upload.js
+│       ├── export.js
+│       ├── validate-code.js
+│       └── customer/[code].js
+├── public/
+│   └── logo.jpg
+├── schema.sql          # DB-Schema mit Testdaten
+├── wrangler.toml       # Cloudflare Konfiguration
+├── package.json
+└── vite.config.js
 ```
 
-## Nächste Schritte (optional)
+## API Endpunkte
 
-- [ ] Bild-Upload für Optionen (Cloudflare R2)
-- [ ] E-Mail-Versand bei Abschluss
-- [ ] Excel-Export für Admins
-- [ ] Mehrsprachigkeit
+### Öffentlich
+- `GET /api/validate-code?code=XXX` - Zugangscode validieren
+- `GET /api/customer/[code]` - Kundendaten für Bemusterung
+- `POST /api/customer/[code]` - Auswahl absenden
+
+### Admin
+- `GET/POST/PUT/DELETE /api/projects` - Projekte verwalten
+- `GET/POST/PUT/DELETE /api/apartments` - Wohnungen verwalten
+- `GET/POST/PUT/DELETE /api/categories` - Kategorien verwalten
+- `GET/POST/PUT/DELETE /api/options` - Optionen verwalten
+- `POST/DELETE /api/upload` - Bilder hochladen/löschen
+- `GET /api/export?project_id=X` - Excel-Export
+
+## Zugangscodes
+
+Zugangscodes werden automatisch generiert im Format: `XXX-YYYYYY`
+- `XXX` = Projektpräfix (erste 3 Buchstaben des Projektnamens)
+- `YYYYYY` = Zufällige alphanumerische Zeichen
+
+Beispiel: `WPS-A3B7K9` für "Wohnpark Am See"
+
+Die Codes werden im Admin-Dashboard angezeigt und können manuell an Kunden weitergegeben werden.
+
+## Umgebungsvariablen
+
+Keine zusätzlichen Umgebungsvariablen erforderlich. Alle Bindings werden über `wrangler.toml` konfiguriert.
+
+## Support
+
+Bei Fragen oder Problemen wenden Sie sich an die IT-Abteilung der G&S Gruppe.
+
+---
+
+© 2024 G&S Gruppe
