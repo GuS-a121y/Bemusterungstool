@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { api, formatDate, getStatusColor, getStatusLabel, formatPrice } from '../lib/api'
+import { api, getStatusColor, getStatusLabel, formatPrice } from '../lib/api'
 import type { Project, Apartment, Category, Option } from '../lib/types'
 import { 
   ArrowLeft, 
@@ -12,9 +12,7 @@ import {
   Check,
   ChevronRight,
   Layers,
-  Package,
-  Trash2,
-  Edit2
+  Package
 } from 'lucide-react'
 
 type Tab = 'apartments' | 'categories'

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { api, formatDate, formatDateTime, getStatusColor, getStatusLabel, formatPrice } from '../lib/api'
+import { api, formatDateTime, getStatusColor, getStatusLabel, formatPrice } from '../lib/api'
 import type { Apartment, Project, Category, Option, Selection } from '../lib/types'
 import { 
   ArrowLeft, 

@@ -6,8 +6,7 @@ import type { Apartment, Project, Category, Option } from '../lib/types'
 import { 
   ChevronLeft, 
   ChevronRight, 
-  Check, 
-  Package,
+  Check,
   AlertTriangle,
   CheckCircle,
   Download
@@ -26,7 +25,7 @@ type Step = 'selection' | 'review' | 'confirm' | 'complete'
 export default function CustomerWizard() {
   const { accessCode } = useParams<{ accessCode: string }>()
   const navigate = useNavigate()
-  const { user, logout } = useAuth()
+  const { logout } = useAuth()
   
   const [apartment, setApartment] = useState<Apartment | null>(null)
   const [project, setProject] = useState<Project | null>(null)
