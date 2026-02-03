@@ -124,7 +124,7 @@ function generatePDFHtml(apartment, selections, totalPrice) {
         <strong>${s.category_name}</strong>
       </td>
       <td style="padding: 12px; border-bottom: 1px solid #e5e7eb;">
-        ${s.option_name}${s.is_custom ? ' <span style="color: #3b82f6; font-size: 11px;">(Sonderausstattung)</span>' : ''}
+        ${s.option_name}
         ${s.option_description ? `<br><span style="color: #6b7280; font-size: 12px;">${s.option_description}</span>` : ''}
       </td>
       <td style="padding: 12px; border-bottom: 1px solid #e5e7eb; text-align: right; white-space: nowrap;">
@@ -141,19 +141,59 @@ function generatePDFHtml(apartment, selections, totalPrice) {
   <style>
     @page { size: A4; margin: 15mm; }
     * { box-sizing: border-box; }
+    html, body { 
+      margin: 0;
+      padding: 0;
+      background: #f3f4f6;
+    }
     body { 
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
       line-height: 1.5; 
       color: #1f2937;
-      margin: 0;
-      padding: 20px;
       font-size: 14px;
+    }
+    .page-wrapper {
+      min-height: 100vh;
+      padding: 20px;
+    }
+    .page-container {
+      max-width: 800px;
+      margin: 0 auto;
+      background: white;
+      box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    .print-bar {
+      background: #E30613; 
+      color: white; 
+      padding: 15px 24px; 
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .print-bar button {
+      background: white; 
+      color: #E30613; 
+      border: none; 
+      padding: 10px 25px; 
+      font-size: 15px; 
+      font-weight: 600; 
+      border-radius: 6px; 
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .print-bar button:hover {
+      background: #f3f4f6;
+    }
+    .content {
+      padding: 32px 40px;
     }
     .letterhead {
       display: flex;
       justify-content: space-between;
       align-items: flex-start;
-      margin-bottom: 25px;
+      margin-bottom: 28px;
       padding-bottom: 20px;
       border-bottom: 3px solid #E30613;
     }
@@ -178,12 +218,13 @@ function generatePDFHtml(apartment, selections, totalPrice) {
     }
     .document-title {
       text-align: center;
-      margin-bottom: 25px;
+      margin-bottom: 28px;
     }
     .document-title h1 {
-      font-size: 22px;
+      font-size: 24px;
       font-weight: bold;
-      margin: 0 0 5px 0;
+      margin: 0 0 6px 0;
+      color: #111827;
     }
     .document-title p {
       color: #6b7280;
@@ -193,145 +234,141 @@ function generatePDFHtml(apartment, selections, totalPrice) {
     .info-grid { 
       display: grid; 
       grid-template-columns: 1fr 1fr; 
-      gap: 15px; 
-      margin-bottom: 20px; 
+      gap: 16px; 
+      margin-bottom: 24px; 
     }
     .info-box { 
       background: #f9fafb; 
-      padding: 12px; 
-      border-radius: 6px; 
+      padding: 14px 16px; 
+      border-radius: 8px;
+      border: 1px solid #e5e7eb;
     }
-    .info-label { font-size: 11px; color: #6b7280; text-transform: uppercase; margin-bottom: 3px; }
-    .info-value { font-weight: 600; font-size: 14px; }
-    table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+    .info-label { font-size: 11px; color: #6b7280; text-transform: uppercase; margin-bottom: 4px; letter-spacing: 0.5px; }
+    .info-value { font-weight: 600; font-size: 15px; color: #111827; }
+    .section-title {
+      font-size: 16px; 
+      margin: 0 0 16px 0; 
+      color: #374151;
+      font-weight: 600;
+    }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 24px; border-radius: 8px; overflow: hidden; }
     th { 
       background: #1f2937; 
       color: white; 
-      padding: 10px 12px; 
+      padding: 12px 14px; 
       text-align: left; 
       font-weight: 600;
       font-size: 13px;
     }
     th:last-child { text-align: right; }
+    tbody tr:hover { background: #f9fafb; }
     .total-row { 
       background: #1f2937; 
       color: white; 
     }
     .total-row td { 
-      padding: 12px; 
+      padding: 14px 14px; 
       font-weight: bold; 
       font-size: 15px;
     }
     .validity-notice {
-      margin-top: 30px;
-      padding-top: 15px;
-      border-top: 1px solid #e5e7eb;
-      font-size: 11px;
-      color: #374151;
+      margin-top: 32px;
+      padding: 16px 20px;
+      background: #f9fafb;
+      border-radius: 8px;
+      border: 1px solid #e5e7eb;
+      font-size: 12px;
+      color: #4b5563;
       line-height: 1.7;
     }
-    .print-bar {
-      background: #E30613; 
-      color: white; 
-      padding: 15px 20px; 
-      margin: -20px -20px 20px -20px; 
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-    .print-bar button {
-      background: white; 
-      color: #E30613; 
-      border: none; 
-      padding: 10px 25px; 
-      font-size: 15px; 
-      font-weight: 600; 
-      border-radius: 6px; 
-      cursor: pointer;
-    }
-    .print-bar button:hover {
-      background: #f3f4f6;
-    }
     @media print {
+      html, body { background: white; }
       .print-bar { display: none !important; }
-      body { padding: 0; }
+      .page-wrapper { padding: 0; }
+      .page-container { max-width: none; box-shadow: none; border-radius: 0; }
+      .content { padding: 0; }
     }
   </style>
 </head>
 <body>
-  <div class="print-bar">
-    <span style="font-weight: 500;">Bemusterungsprotokoll für ${apartment.customer_name || apartment.name}</span>
-    <button onclick="window.print()">Als PDF speichern / Drucken</button>
-  </div>
+  <div class="page-wrapper">
+    <div class="page-container">
+      <div class="print-bar">
+        <span style="font-weight: 500;">Bemusterungsprotokoll für ${apartment.customer_name || apartment.name}</span>
+        <button onclick="window.print()">Als PDF speichern / Drucken</button>
+      </div>
 
-  <div class="letterhead">
-    <div class="company-info">
-      <div class="company-name">G&S Gruppe</div>
-      <div class="company-address">
-        Felix-Wankel-Straße 29<br>
-        53881 Euskirchen
+      <div class="content">
+        <div class="letterhead">
+          <div class="company-info">
+            <div class="company-name">G&S Gruppe</div>
+            <div class="company-address">
+              Felix-Wankel-Straße 29<br>
+              53881 Euskirchen
+            </div>
+          </div>
+          <div class="logo-container">
+            <img src="/logo.jpg" alt="G&S Gruppe Logo">
+          </div>
+        </div>
+
+        <div class="document-title">
+          <h1>Bemusterungsprotokoll</h1>
+          <p>Verbindliche Ausstattungsauswahl vom ${date}</p>
+        </div>
+
+        <div class="info-grid">
+          <div class="info-box">
+            <div class="info-label">Projekt</div>
+            <div class="info-value">${apartment.project_name}</div>
+            ${apartment.project_address ? `<div style="font-size: 13px; color: #6b7280; margin-top: 3px;">${apartment.project_address}</div>` : ''}
+          </div>
+          <div class="info-box">
+            <div class="info-label">Wohnung</div>
+            <div class="info-value">${apartment.name}</div>
+            <div style="font-size: 13px; color: #6b7280; margin-top: 3px;">
+              ${[apartment.floor, apartment.size_sqm ? apartment.size_sqm + ' m²' : '', apartment.rooms ? apartment.rooms + ' Zimmer' : ''].filter(Boolean).join(' · ') || '-'}
+            </div>
+          </div>
+          <div class="info-box">
+            <div class="info-label">Kunde</div>
+            <div class="info-value">${apartment.customer_name || '-'}</div>
+            ${apartment.customer_email ? `<div style="font-size: 13px; color: #6b7280; margin-top: 3px;">${apartment.customer_email}</div>` : ''}
+          </div>
+          <div class="info-box">
+            <div class="info-label">Referenz</div>
+            <div class="info-value" style="font-family: monospace; letter-spacing: 1px;">${apartment.access_code}</div>
+            <div style="font-size: 13px; color: #6b7280; margin-top: 3px;">Erstellt: ${date}, ${time} Uhr</div>
+          </div>
+        </div>
+
+        <h3 class="section-title">Gewählte Ausstattung</h3>
+        
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 28%;">Kategorie</th>
+              <th>Gewählte Option</th>
+              <th style="width: 15%;">Mehrpreis</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${selectionRows || '<tr><td colspan="3" style="padding: 24px; text-align: center; color: #6b7280;">Keine Auswahl vorhanden</td></tr>'}
+          </tbody>
+          <tfoot>
+            <tr class="total-row">
+              <td colspan="2">Gesamter Mehrpreis zur Basisausstattung</td>
+              <td style="text-align: right;">${totalPrice >= 0 ? '+' : ''}${totalPrice.toLocaleString('de-DE')} €</td>
+            </tr>
+          </tfoot>
+        </table>
+
+        <div class="validity-notice">
+          Dieses Bemusterungsprotokoll wurde am ${date} um ${time} Uhr maschinell erstellt und elektronisch über das Bemusterungsportal der G&S Gruppe übermittelt. Das Dokument ist ohne Unterschrift rechtsgültig, da die Auswahl durch den Kunden aktiv und verbindlich im Online-Portal bestätigt wurde.
+        </div>
       </div>
     </div>
-    <div class="logo-container">
-      <img src="/logo.jpg" alt="G&S Gruppe Logo">
-    </div>
   </div>
-
-  <div class="document-title">
-    <h1>Bemusterungsprotokoll</h1>
-    <p>Verbindliche Ausstattungsauswahl vom ${date}</p>
-  </div>
-
-  <div class="info-grid">
-    <div class="info-box">
-      <div class="info-label">Projekt</div>
-      <div class="info-value">${apartment.project_name}</div>
-      ${apartment.project_address ? `<div style="font-size: 13px; color: #6b7280; margin-top: 2px;">${apartment.project_address}</div>` : ''}
-    </div>
-    <div class="info-box">
-      <div class="info-label">Wohnung</div>
-      <div class="info-value">${apartment.name}</div>
-      <div style="font-size: 13px; color: #6b7280; margin-top: 2px;">
-        ${[apartment.floor, apartment.size_sqm ? apartment.size_sqm + ' m²' : '', apartment.rooms ? apartment.rooms + ' Zimmer' : ''].filter(Boolean).join(' · ') || '-'}
-      </div>
-    </div>
-    <div class="info-box">
-      <div class="info-label">Kunde</div>
-      <div class="info-value">${apartment.customer_name || '-'}</div>
-      ${apartment.customer_email ? `<div style="font-size: 13px; color: #6b7280; margin-top: 2px;">${apartment.customer_email}</div>` : ''}
-    </div>
-    <div class="info-box">
-      <div class="info-label">Referenz</div>
-      <div class="info-value" style="font-family: monospace; letter-spacing: 1px;">${apartment.access_code}</div>
-      <div style="font-size: 13px; color: #6b7280; margin-top: 2px;">Erstellt: ${date}, ${time} Uhr</div>
-    </div>
-  </div>
-
-  <h3 style="font-size: 15px; margin: 0 0 12px 0; color: #374151;">Gewählte Ausstattung</h3>
-  
-  <table>
-    <thead>
-      <tr>
-        <th style="width: 28%;">Kategorie</th>
-        <th>Gewählte Option</th>
-        <th style="width: 15%;">Mehrpreis</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${selectionRows || '<tr><td colspan="3" style="padding: 20px; text-align: center; color: #6b7280;">Keine Auswahl vorhanden</td></tr>'}
-    </tbody>
-    <tfoot>
-      <tr class="total-row">
-        <td colspan="2">Gesamter Mehrpreis zur Basisausstattung</td>
-        <td style="text-align: right;">${totalPrice >= 0 ? '+' : ''}${totalPrice.toLocaleString('de-DE')} €</td>
-      </tr>
-    </tfoot>
-  </table>
-
-  <div class="validity-notice">
-    Dieses Bemusterungsprotokoll wurde am ${date} um ${time} Uhr maschinell erstellt und elektronisch über das Bemusterungsportal der G&S Gruppe übermittelt. Das Dokument ist ohne Unterschrift rechtsgültig, da die Auswahl durch den Kunden aktiv und verbindlich im Online-Portal bestätigt wurde.
-  </div>
-
 </body>
 </html>`
 }

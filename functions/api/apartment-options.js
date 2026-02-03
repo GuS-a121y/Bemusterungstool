@@ -77,13 +77,14 @@ export async function onRequestPost(context) {
       }
 
       const result = await env.DB.prepare(`
-        INSERT INTO apartment_custom_options (apartment_id, category_id, name, description, price, image_url)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO apartment_custom_options (apartment_id, category_id, name, description, info_text, price, image_url)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
       `).bind(
         parseInt(apartment_id),
         parseInt(category_id),
         name.trim(),
         description || '',
+        data.info_text || '',
         parseFloat(price) || 0,
         image_url || null
       ).run()
@@ -97,6 +98,7 @@ export async function onRequestPost(context) {
           category_id: parseInt(category_id),
           name: name.trim(),
           description: description || '',
+          info_text: data.info_text || '',
           price: parseFloat(price) || 0,
           image_url: image_url || null
         }

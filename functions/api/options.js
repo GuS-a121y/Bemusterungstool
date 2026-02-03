@@ -48,7 +48,7 @@ export async function onRequestPost(context) {
   const { request, env } = context
 
   try {
-    const { category_id, name, description, price, image_url, is_default, sort_order } = await request.json()
+    const { category_id, name, description, info_text, price, image_url, is_default, sort_order } = await request.json()
 
     if (!category_id || !name?.trim()) {
       return Response.json({ error: 'Kategorie und Name sind erforderlich' }, { status: 400 })
@@ -71,12 +71,13 @@ export async function onRequestPost(context) {
     }
 
     const result = await env.DB.prepare(`
-      INSERT INTO options (category_id, name, description, price, image_url, is_default, sort_order)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO options (category_id, name, description, info_text, price, image_url, is_default, sort_order)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(
       parseInt(category_id),
       name.trim(),
       description || '',
+      info_text || '',
       parseFloat(price) || 0,
       image_url || null,
       is_default ? 1 : 0,
@@ -97,7 +98,7 @@ export async function onRequestPut(context) {
   const { request, env } = context
 
   try {
-    const { id, category_id, name, description, price, image_url, is_default, sort_order } = await request.json()
+    const { id, category_id, name, description, info_text, price, image_url, is_default, sort_order } = await request.json()
 
     if (!id || !name?.trim()) {
       return Response.json({ error: 'ID und Name sind erforderlich' }, { status: 400 })
@@ -112,11 +113,12 @@ export async function onRequestPut(context) {
 
     await env.DB.prepare(`
       UPDATE options 
-      SET name = ?, description = ?, price = ?, image_url = ?, is_default = ?, sort_order = ?
+      SET name = ?, description = ?, info_text = ?, price = ?, image_url = ?, is_default = ?, sort_order = ?
       WHERE id = ?
     `).bind(
       name.trim(),
       description || '',
+      info_text || '',
       parseFloat(price) || 0,
       image_url || null,
       is_default ? 1 : 0,

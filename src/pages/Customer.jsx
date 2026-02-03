@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ChevronLeft, ChevronRight, Check, Home, AlertCircle, CheckCircle2, Loader2, FileText, ArrowRight } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Check, Home, AlertCircle, CheckCircle2, Loader2, FileText, ArrowRight, Info, X, ZoomIn, Save } from 'lucide-react'
 
 // Footer Komponente
 const Footer = () => (
@@ -14,6 +14,39 @@ const Footer = () => (
   </footer>
 )
 
+// Info Modal
+const InfoModal = ({ isOpen, onClose, title, content }) => {
+  if (!isOpen) return null
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="info-modal" onClick={e => e.stopPropagation()}>
+        <div className="info-modal-header">
+          <h3>{title}</h3>
+          <button className="modal-close" onClick={onClose}><X size={20} /></button>
+        </div>
+        <div className="info-modal-content">
+          {content.split('\n').map((line, i) => (
+            <p key={i}>{line || <br />}</p>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Bild Modal
+const ImageModal = ({ isOpen, onClose, src, alt }) => {
+  if (!isOpen || !src) return null
+  return (
+    <div className="modal-overlay image-modal-overlay" onClick={onClose}>
+      <div className="image-modal" onClick={e => e.stopPropagation()}>
+        <button className="image-modal-close" onClick={onClose}><X size={24} /></button>
+        <img src={src} alt={alt} />
+      </div>
+    </div>
+  )
+}
+
 function Customer() {
   const { code } = useParams()
   const navigate = useNavigate()
@@ -25,7 +58,13 @@ function Customer() {
   const [currentStep, setCurrentStep] = useState(-1) // -1 = Einleitungsseite
   const [selections, setSelections] = useState({})
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isSavingDraft, setIsSavingDraft] = useState(false)
   const [isCompleted, setIsCompleted] = useState(false)
+  const [draftSaved, setDraftSaved] = useState(false)
+  
+  // Modal States
+  const [infoModal, setInfoModal] = useState({ open: false, title: '', content: '' })
+  const [imageModal, setImageModal] = useState({ open: false, src: '', alt: '' })
 
   // Daten von API laden
   useEffect(() => {
@@ -53,13 +92,28 @@ function Customer() {
         }
 
         // Vorauswahl: bestehende Auswahl oder Standardoptionen
-        const defaultSelections = { ...data.selections }
+        const defaultSelections = {}
+        
+        // Erst bestehende Auswahl laden
+        if (data.selections) {
+          Object.entries(data.selections).forEach(([catId, optId]) => {
+            // Negative IDs sind custom options
+            if (optId < 0) {
+              defaultSelections[catId] = `custom_${Math.abs(optId)}`
+            } else {
+              defaultSelections[catId] = optId
+            }
+          })
+        }
+        
+        // Dann für fehlende Kategorien Defaults setzen
         data.categories.forEach(cat => {
           if (!defaultSelections[cat.id]) {
             const defaultOpt = cat.options.find(o => o.is_default) || cat.options[0]
             if (defaultOpt) defaultSelections[cat.id] = defaultOpt.id
           }
         })
+        
         setSelections(defaultSelections)
         setLoading(false)
 
@@ -78,7 +132,7 @@ function Customer() {
     let total = 0
     Object.entries(selections).forEach(([catId, optionId]) => {
       const category = categories.find(c => c.id === parseInt(catId))
-      const option = category?.options.find(o => o.id === optionId || o.id === `custom_${optionId}`)
+      const option = category?.options.find(o => o.id === optionId || o.id === `custom_${optionId}` || `custom_${o.custom_id}` === optionId)
       if (option) total += option.price
     })
     return total
@@ -87,6 +141,7 @@ function Customer() {
   // Option auswählen
   const handleSelect = (categoryId, optionId) => {
     setSelections(prev => ({ ...prev, [categoryId]: optionId }))
+    setDraftSaved(false)
   }
 
   // Navigation
@@ -94,7 +149,33 @@ function Customer() {
   const prevStep = () => { if (currentStep > 0) setCurrentStep(prev => prev - 1) }
   const startBemusterung = () => setCurrentStep(0)
 
-  // Absenden
+  // Zwischenspeichern
+  const handleSaveDraft = async () => {
+    setIsSavingDraft(true)
+    
+    try {
+      const res = await fetch(`/api/customer/${code.toUpperCase()}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ selections, draft: true })
+      })
+      
+      if (res.ok) {
+        setDraftSaved(true)
+        setTimeout(() => setDraftSaved(false), 3000)
+      } else {
+        const data = await res.json()
+        alert(data.error || 'Fehler beim Speichern')
+      }
+    } catch (err) {
+      console.error('Fehler:', err)
+      alert('Fehler beim Speichern. Bitte versuchen Sie es erneut.')
+    } finally {
+      setIsSavingDraft(false)
+    }
+  }
+
+  // Final absenden
   const handleSubmit = async () => {
     if (!confirm('Möchten Sie Ihre Auswahl verbindlich abschicken? Eine nachträgliche Änderung ist nicht möglich.')) return
 
@@ -104,12 +185,11 @@ function Customer() {
       const res = await fetch(`/api/customer/${code.toUpperCase()}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ selections })
+        body: JSON.stringify({ selections, draft: false })
       })
       
       if (res.ok) {
         setIsCompleted(true)
-        // PDF in neuem Tab öffnen damit der Kunde es speichern kann
         window.open(`/api/pdf?code=${code.toUpperCase()}`, '_blank')
       } else {
         const data = await res.json()
@@ -128,6 +208,16 @@ function Customer() {
     if (price === 0) return 'Inklusive'
     if (price > 0) return `+${price.toLocaleString('de-DE')} €`
     return `${price.toLocaleString('de-DE')} €`
+  }
+
+  // Info Modal öffnen
+  const openInfoModal = (title, content) => {
+    setInfoModal({ open: true, title, content })
+  }
+
+  // Bild Modal öffnen
+  const openImageModal = (src, alt) => {
+    setImageModal({ open: true, src, alt })
   }
 
   // Loading
@@ -192,7 +282,7 @@ function Customer() {
               <div style={{ background: 'var(--gray-50)', borderRadius: '12px', padding: '1.5rem', marginBottom: '2rem', textAlign: 'left' }}>
                 <h4 style={{ marginBottom: '1rem' }}>Ihre Auswahl im Überblick</h4>
                 {categories.map(cat => {
-                  const selectedOption = cat.options.find(o => o.id === selections[cat.id])
+                  const selectedOption = cat.options.find(o => o.id === selections[cat.id] || `custom_${o.custom_id}` === selections[cat.id])
                   return selectedOption && (
                     <div key={cat.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.75rem 0', borderBottom: '1px solid var(--gray-200)' }}>
                       <div>
@@ -228,7 +318,7 @@ function Customer() {
 
 In den folgenden Schritten können Sie die Ausstattung Ihrer Wohnung ganz nach Ihren Wünschen auswählen. Für jede Kategorie stehen Ihnen verschiedene Optionen zur Verfügung - von der Basisausstattung bis zu hochwertigen Upgrades.
 
-Nehmen Sie sich Zeit für Ihre Auswahl. Am Ende erhalten Sie eine Übersicht und können Ihre Entscheidung verbindlich bestätigen.`
+Nehmen Sie sich Zeit für Ihre Auswahl. Sie können Ihren Fortschritt jederzeit zwischenspeichern und später fortfahren. Am Ende erhalten Sie eine Übersicht und können Ihre Entscheidung verbindlich bestätigen.`
 
     return (
       <div className="wizard-page">
@@ -325,7 +415,7 @@ Nehmen Sie sich Zeit für Ihre Auswahl. Am Ende erhalten Sie eine Übersicht und
               <p style={{ color: 'var(--gray-500)', marginBottom: '1.5rem' }}>Bitte überprüfen Sie Ihre Auswahl.</p>
               <div className="overview-list">
                 {categories.map(cat => {
-                  const selectedOption = cat.options.find(o => o.id === selections[cat.id])
+                  const selectedOption = cat.options.find(o => o.id === selections[cat.id] || `custom_${o.custom_id}` === selections[cat.id])
                   return (
                     <div key={cat.id} className="overview-item">
                       <div className="overview-item-main">
@@ -351,32 +441,50 @@ Nehmen Sie sich Zeit für Ihre Auswahl. Am Ende erhalten Sie eine Übersicht und
               <h2 style={{ marginBottom: '0.5rem' }}>{currentCategory?.name}</h2>
               <p style={{ color: 'var(--gray-500)', marginBottom: '1.5rem' }}>{currentCategory?.description}</p>
               <div className="option-grid">
-                {currentCategory?.options.map(option => (
-                  <div
-                    key={option.id}
-                    className={`option-card ${selections[currentCategory.id] === option.id ? 'selected' : ''}`}
-                    onClick={() => handleSelect(currentCategory.id, option.id)}
-                  >
-                    {option.image_url ? (
-                      <img src={option.image_url} alt={option.name} className="option-image" />
-                    ) : (
-                      <div className="option-image option-image-placeholder">
-                        <span>Kein Bild</span>
+                {currentCategory?.options.map(option => {
+                  const isSelected = selections[currentCategory.id] === option.id || selections[currentCategory.id] === `custom_${option.custom_id}`
+                  return (
+                    <div
+                      key={option.id}
+                      className={`option-card ${isSelected ? 'selected' : ''}`}
+                      onClick={() => handleSelect(currentCategory.id, option.id)}
+                    >
+                      {option.image_url ? (
+                        <div className="option-image-wrapper">
+                          <img src={option.image_url} alt={option.name} className="option-image" />
+                          <button 
+                            className="option-zoom-btn" 
+                            onClick={(e) => { e.stopPropagation(); openImageModal(option.image_url, option.name) }}
+                          >
+                            <ZoomIn size={16} />
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="option-image option-image-placeholder">
+                          <span>Kein Bild</span>
+                        </div>
+                      )}
+                      <div className="option-content">
+                        <div className="option-name">
+                          {option.name}
+                          {option.info_text && (
+                            <button 
+                              className="option-info-btn" 
+                              onClick={(e) => { e.stopPropagation(); openInfoModal(option.name, option.info_text) }}
+                            >
+                              <Info size={16} />
+                            </button>
+                          )}
+                        </div>
+                        {option.description && <div className="option-description">{option.description}</div>}
+                        <div className="option-price">{formatPrice(option.price)}</div>
                       </div>
-                    )}
-                    <div className="option-content">
-                      <div className="option-name">
-                        {option.name}
-                        {option.is_custom && <span className="custom-tag">Individuell</span>}
-                      </div>
-                      {option.description && <div className="option-description">{option.description}</div>}
-                      <div className="option-price">{formatPrice(option.price)}</div>
+                      {isSelected && (
+                        <div className="option-check"><Check size={20} /></div>
+                      )}
                     </div>
-                    {selections[currentCategory.id] === option.id && (
-                      <div className="option-check"><Check size={20} /></div>
-                    )}
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             </>
           )}
@@ -384,9 +492,19 @@ Nehmen Sie sich Zeit für Ihre Auswahl. Am Ende erhalten Sie eine Übersicht und
 
         {/* Footer */}
         <div className="wizard-footer">
-          <div className="wizard-total">
-            <div className="wizard-total-label">Aktueller Mehrpreis</div>
-            <div className="wizard-total-value">{calculateTotal() >= 0 ? '+' : ''}{calculateTotal().toLocaleString('de-DE')} €</div>
+          <div className="wizard-footer-left">
+            <div className="wizard-total">
+              <div className="wizard-total-label">Aktueller Mehrpreis</div>
+              <div className="wizard-total-value">{calculateTotal() >= 0 ? '+' : ''}{calculateTotal().toLocaleString('de-DE')} €</div>
+            </div>
+            <button 
+              className={`btn btn-outline btn-save-draft ${draftSaved ? 'saved' : ''}`} 
+              onClick={handleSaveDraft} 
+              disabled={isSavingDraft}
+            >
+              {isSavingDraft ? <Loader2 size={16} className="animate-spin" /> : draftSaved ? <Check size={16} /> : <Save size={16} />}
+              {draftSaved ? 'Gespeichert!' : 'Zwischenspeichern'}
+            </button>
           </div>
           <div style={{ display: 'flex', gap: '0.75rem' }}>
             {currentStep > 0 && <button className="btn btn-outline" onClick={prevStep}><ChevronLeft size={18} /> Zurück</button>}
@@ -400,6 +518,21 @@ Nehmen Sie sich Zeit für Ihre Auswahl. Am Ende erhalten Sie eine Übersicht und
           </div>
         </div>
       </div>
+      
+      {/* Modals */}
+      <InfoModal 
+        isOpen={infoModal.open} 
+        onClose={() => setInfoModal({ ...infoModal, open: false })}
+        title={infoModal.title}
+        content={infoModal.content}
+      />
+      <ImageModal
+        isOpen={imageModal.open}
+        onClose={() => setImageModal({ ...imageModal, open: false })}
+        src={imageModal.src}
+        alt={imageModal.alt}
+      />
+      
       <Footer />
       <style>{wizardStyles}</style>
     </div>
@@ -457,19 +590,27 @@ const wizardStyles = `
   .option-card { position: relative; border: 2px solid var(--gray-200); border-radius: 8px; overflow: hidden; cursor: pointer; transition: all 0.2s; }
   .option-card:hover { border-color: var(--gray-300); box-shadow: var(--shadow-md); }
   .option-card.selected { border-color: var(--gs-red); box-shadow: 0 0 0 3px rgba(227, 6, 19, 0.1); }
-  .option-image { width: 100%; height: 160px; object-fit: cover; background: var(--gray-100); }
-  .option-image-placeholder { display: flex; align-items: center; justify-content: center; color: var(--gray-400); }
+  .option-image-wrapper { position: relative; }
+  .option-image { width: 100%; height: 160px; object-fit: cover; background: var(--gray-100); display: block; }
+  .option-image-placeholder { display: flex; align-items: center; justify-content: center; color: var(--gray-400); height: 160px; background: var(--gray-100); }
+  .option-zoom-btn { position: absolute; bottom: 8px; right: 8px; width: 32px; height: 32px; background: rgba(255,255,255,0.9); border: none; border-radius: 6px; display: flex; align-items: center; justify-content: center; cursor: pointer; opacity: 0; transition: opacity 0.2s; }
+  .option-card:hover .option-zoom-btn { opacity: 1; }
+  .option-zoom-btn:hover { background: white; }
   .option-content { padding: 1rem; }
-  .option-name { font-weight: 600; margin-bottom: 0.25rem; display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+  .option-name { font-weight: 600; margin-bottom: 0.25rem; display: flex; align-items: center; gap: 0.5rem; }
+  .option-info-btn { width: 22px; height: 22px; border-radius: 50%; border: 1px solid var(--gray-300); background: white; display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--gray-500); flex-shrink: 0; }
+  .option-info-btn:hover { border-color: var(--gs-red); color: var(--gs-red); }
   .option-description { font-size: 0.875rem; color: var(--gray-500); margin-bottom: 0.75rem; }
   .option-price { font-size: 1rem; font-weight: 600; }
   .option-check { position: absolute; top: 0.75rem; right: 0.75rem; width: 28px; height: 28px; background: var(--gs-red); color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
-  .custom-tag { display: inline-block; padding: 0.125rem 0.5rem; background: var(--info); color: white; font-size: 0.6875rem; border-radius: 9999px; font-weight: 600; }
   
   /* Wizard Footer */
-  .wizard-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid var(--gray-200); }
+  .wizard-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid var(--gray-200); flex-wrap: wrap; gap: 1rem; }
+  .wizard-footer-left { display: flex; align-items: center; gap: 1.5rem; }
   .wizard-total-label { color: var(--gray-500); font-size: 0.875rem; }
   .wizard-total-value { font-weight: 700; font-family: 'Space Grotesk', sans-serif; font-size: 1.25rem; }
+  .btn-save-draft { font-size: 0.8125rem; }
+  .btn-save-draft.saved { color: var(--success); border-color: var(--success); }
   
   /* Overview */
   .overview-list { border: 1px solid var(--gray-200); border-radius: 8px; overflow: hidden; }
@@ -484,6 +625,23 @@ const wizardStyles = `
   .overview-total-note { font-size: 0.8125rem; opacity: 0.7; }
   .overview-total-value { font-family: 'Space Grotesk', sans-serif; font-size: 1.5rem; font-weight: 700; }
   
+  /* Modals */
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 1rem; }
+  .info-modal { background: white; border-radius: 12px; max-width: 500px; width: 100%; max-height: 80vh; overflow: hidden; display: flex; flex-direction: column; }
+  .info-modal-header { display: flex; justify-content: space-between; align-items: center; padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--gray-200); }
+  .info-modal-header h3 { margin: 0; font-size: 1.125rem; }
+  .modal-close { background: none; border: none; cursor: pointer; color: var(--gray-500); padding: 4px; }
+  .modal-close:hover { color: var(--gray-700); }
+  .info-modal-content { padding: 1.5rem; overflow-y: auto; color: var(--gray-600); line-height: 1.7; }
+  .info-modal-content p { margin: 0 0 0.75rem; }
+  .info-modal-content p:last-child { margin-bottom: 0; }
+  
+  .image-modal-overlay { background: rgba(0,0,0,0.85); }
+  .image-modal { position: relative; max-width: 90vw; max-height: 90vh; }
+  .image-modal img { max-width: 100%; max-height: 85vh; object-fit: contain; border-radius: 8px; }
+  .image-modal-close { position: absolute; top: -40px; right: 0; background: none; border: none; color: white; cursor: pointer; padding: 8px; }
+  .image-modal-close:hover { color: var(--gray-300); }
+  
   .animate-spin { animation: spin 1s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
   
@@ -494,8 +652,9 @@ const wizardStyles = `
     .intro-container { padding: 1rem; }
     .intro-content { padding: 1.5rem; }
     .intro-content h1 { font-size: 1.5rem; }
-    .wizard-footer { flex-direction: column; gap: 1rem; }
-    .wizard-footer > div:last-child { width: 100%; display: flex; }
+    .wizard-footer { flex-direction: column; align-items: stretch; }
+    .wizard-footer-left { justify-content: space-between; }
+    .wizard-footer > div:last-child { display: flex; }
     .wizard-footer .btn { flex: 1; }
   }
 `

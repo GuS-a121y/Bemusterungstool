@@ -406,9 +406,9 @@ const ProjectDetail = ({ onLogout }) => {
 
   // Forms
   const [categoryForm, setCategoryForm] = useState({ name: '', description: '', sort_order: 1 })
-  const [optionForm, setOptionForm] = useState({ name: '', description: '', price: '0', is_default: 0, image_url: '' })
+  const [optionForm, setOptionForm] = useState({ name: '', description: '', info_text: '', price: '0', is_default: 0, image_url: '' })
   const [apartmentForm, setApartmentForm] = useState({ name: '', floor: '', size_sqm: '', rooms: '', customer_name: '', customer_email: '' })
-  const [customForm, setCustomForm] = useState({ category_id: '', new_category_name: '', use_new_category: false, name: '', description: '', price: '0', image_url: '' })
+  const [customForm, setCustomForm] = useState({ category_id: '', new_category_name: '', use_new_category: false, name: '', description: '', info_text: '', price: '0', image_url: '' })
   const [batchText, setBatchText] = useState('')
 
   const loadData = useCallback(async () => {
@@ -458,7 +458,14 @@ const ProjectDetail = ({ onLogout }) => {
   const openOptionModal = (catId, opt = null) => {
     setSelectedCategory(catId)
     setEditItem(opt)
-    setOptionForm(opt ? { name: opt.name, description: opt.description || '', price: opt.price.toString(), is_default: opt.is_default, image_url: opt.image_url || '' } : { name: '', description: '', price: '0', is_default: 0, image_url: '' })
+    setOptionForm(opt ? { 
+      name: opt.name, 
+      description: opt.description || '', 
+      info_text: opt.info_text || '',
+      price: opt.price.toString(), 
+      is_default: opt.is_default, 
+      image_url: opt.image_url || '' 
+    } : { name: '', description: '', info_text: '', price: '0', is_default: 0, image_url: '' })
     setShowOptionModal(true)
   }
 
@@ -590,7 +597,8 @@ const ProjectDetail = ({ onLogout }) => {
       new_category_name: '',
       use_new_category: false,
       name: '', 
-      description: '', 
+      description: '',
+      info_text: '',
       price: '0', 
       image_url: '' 
     })
@@ -635,6 +643,7 @@ const ProjectDetail = ({ onLogout }) => {
         category_id: categoryId,
         name: customForm.name.trim(),
         description: customForm.description,
+        info_text: customForm.info_text || '',
         price: parseFloat(customForm.price) || 0,
         image_url: customForm.image_url || null
       })
@@ -783,7 +792,8 @@ const ProjectDetail = ({ onLogout }) => {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
             <div>
               <div className="form-group"><label className="form-label">Name *</label><input type="text" className="form-input" value={optionForm.name} onChange={e => setOptionForm({ ...optionForm, name: e.target.value })} autoFocus /></div>
-              <div className="form-group"><label className="form-label">Beschreibung</label><textarea className="form-textarea" value={optionForm.description} onChange={e => setOptionForm({ ...optionForm, description: e.target.value })} style={{ minHeight: 80 }} /></div>
+              <div className="form-group"><label className="form-label">Kurzbeschreibung</label><textarea className="form-textarea" value={optionForm.description} onChange={e => setOptionForm({ ...optionForm, description: e.target.value })} style={{ minHeight: 60 }} placeholder="Kurze Beschreibung (wird direkt angezeigt)" /></div>
+              <div className="form-group"><label className="form-label">Zusätzliche Informationen (i-Button)</label><textarea className="form-textarea" value={optionForm.info_text} onChange={e => setOptionForm({ ...optionForm, info_text: e.target.value })} style={{ minHeight: 80 }} placeholder="Ausführliche Infos für Popup (optional)" /><p className="form-hint">Wird beim Klick auf den Info-Button angezeigt</p></div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                 <div className="form-group"><label className="form-label">Preis (€)</label><input type="number" className="form-input" value={optionForm.price} onChange={e => setOptionForm({ ...optionForm, price: e.target.value })} step="0.01" /><p className="form-hint">0 = Inklusive</p></div>
                 <div className="form-group"><label className="form-label">&nbsp;</label><label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', marginTop: 8 }}><input type="checkbox" checked={optionForm.is_default === 1} onChange={e => setOptionForm({ ...optionForm, is_default: e.target.checked ? 1 : 0 })} style={{ width: 18, height: 18 }} /><span>Standard</span></label></div>
@@ -896,7 +906,8 @@ const ProjectDetail = ({ onLogout }) => {
             )}
           </div>
           <div className="form-group"><label className="form-label">Optionsname *</label><input type="text" className="form-input" value={customForm.name} onChange={e => setCustomForm({ ...customForm, name: e.target.value })} /></div>
-          <div className="form-group"><label className="form-label">Beschreibung</label><textarea className="form-textarea" value={customForm.description} onChange={e => setCustomForm({ ...customForm, description: e.target.value })} /></div>
+          <div className="form-group"><label className="form-label">Beschreibung</label><textarea className="form-textarea" value={customForm.description} onChange={e => setCustomForm({ ...customForm, description: e.target.value })} placeholder="Kurze Beschreibung" /></div>
+          <div className="form-group"><label className="form-label">Zusätzliche Informationen (i-Button)</label><textarea className="form-textarea" value={customForm.info_text} onChange={e => setCustomForm({ ...customForm, info_text: e.target.value })} placeholder="Ausführliche Infos für Popup (optional)" /></div>
           <div className="form-group"><label className="form-label">Preis (€)</label><input type="number" className="form-input" value={customForm.price} onChange={e => setCustomForm({ ...customForm, price: e.target.value })} step="0.01" /></div>
           <div className="form-group"><label className="form-label">Bild (optional)</label><ImageUpload value={customForm.image_url} onChange={url => setCustomForm({ ...customForm, image_url: url })} /></div>
         </div>

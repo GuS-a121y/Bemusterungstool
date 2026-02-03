@@ -52,7 +52,7 @@ export async function onRequestGet(context) {
     const categories = []
     for (const cat of categoriesResult.results) {
       const optionsResult = await env.DB.prepare(`
-        SELECT id, name, description, price, image_url, is_default, sort_order
+        SELECT id, name, description, info_text, price, image_url, is_default, sort_order
         FROM options
         WHERE category_id = ?
         ORDER BY sort_order ASC
@@ -134,7 +134,7 @@ export async function onRequestPost(context) {
 
   try {
     const body = await request.json()
-    const { selections } = body
+    const { selections, draft } = body // draft = true für Zwischenspeichern
 
     if (!selections || typeof selections !== 'object') {
       return Response.json({ error: 'Ungültige Auswahl' }, { status: 400 })
@@ -171,13 +171,25 @@ export async function onRequestPost(context) {
     }
 
     // Status aktualisieren
-    await env.DB.prepare(`
-      UPDATE apartments 
-      SET status = 'abgeschlossen', completed_at = CURRENT_TIMESTAMP 
-      WHERE id = ?
-    `).bind(apartment.id).run()
-
-    return Response.json({ success: true })
+    if (draft) {
+      // Nur Zwischenspeichern - Status auf "in_bearbeitung"
+      await env.DB.prepare(`
+        UPDATE apartments 
+        SET status = 'in_bearbeitung'
+        WHERE id = ?
+      `).bind(apartment.id).run()
+      
+      return Response.json({ success: true, draft: true })
+    } else {
+      // Final absenden - Status auf "abgeschlossen"
+      await env.DB.prepare(`
+        UPDATE apartments 
+        SET status = 'abgeschlossen', completed_at = CURRENT_TIMESTAMP 
+        WHERE id = ?
+      `).bind(apartment.id).run()
+      
+      return Response.json({ success: true, draft: false })
+    }
 
   } catch (error) {
     console.error('DB Error:', error)
