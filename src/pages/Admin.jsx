@@ -1,11 +1,19 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { Routes, Route, useNavigate, useLocation, useParams } from 'react-router-dom'
 import {
   LayoutDashboard, Building2, Home, FolderOpen, Package,
   Plus, Edit2, Trash2, Eye, Download, Copy, Check, X, Search,
   ChevronRight, ChevronLeft, Upload, Image, ArrowLeft, Save, AlertCircle,
-  Users, Settings, FileSpreadsheet
+  Users, Settings, FileSpreadsheet, Lock, LogOut, ImagePlus
 } from 'lucide-react'
+
+// ============================================
+// KONFIGURATION - Zugangsdaten hier ändern!
+// ============================================
+const ADMIN_CREDENTIALS = {
+  username: 'admin',
+  password: 'bemusterung2024'
+}
 
 // Demo-Daten für lokale Entwicklung
 const INITIAL_DATA = {
@@ -31,18 +39,18 @@ const INITIAL_DATA = {
     { id: 7, project_id: 2, name: 'Badezimmer Deluxe', description: 'Hochwertige Sanitärausstattung', sort_order: 2 }
   ],
   options: [
-    { id: 1, category_id: 1, name: 'Eiche Natur', description: 'Parkett Eiche, gebürstet', price: 0, is_default: 1, sort_order: 1 },
-    { id: 2, category_id: 1, name: 'Eiche Grau', description: 'Parkett Eiche, grau lasiert', price: 850, is_default: 0, sort_order: 2 },
-    { id: 3, category_id: 1, name: 'Nussbaum', description: 'Parkett Nussbaum, matt', price: 1200, is_default: 0, sort_order: 3 },
-    { id: 4, category_id: 2, name: 'Feinsteinzeug Weiß', description: 'Großformat 60x60', price: 0, is_default: 1, sort_order: 1 },
-    { id: 5, category_id: 2, name: 'Feinsteinzeug Anthrazit', description: 'Großformat 60x60', price: 450, is_default: 0, sort_order: 2 },
-    { id: 6, category_id: 3, name: 'Standard Paket', description: 'Wand-WC, Waschtisch 60cm', price: 0, is_default: 1, sort_order: 1 },
-    { id: 7, category_id: 3, name: 'Komfort Paket', description: 'Spülrandlos, Waschtisch 80cm', price: 1850, is_default: 0, sort_order: 2 },
-    { id: 8, category_id: 3, name: 'Premium Paket', description: 'Walk-In Dusche, Badewanne', price: 4200, is_default: 0, sort_order: 3 },
-    { id: 9, category_id: 4, name: 'Weiß lackiert', description: 'Glatte Oberfläche', price: 0, is_default: 1, sort_order: 1 },
-    { id: 10, category_id: 4, name: 'Eiche furniert', description: 'Echtholzfurnier', price: 420, is_default: 0, sort_order: 2 },
-    { id: 11, category_id: 5, name: 'Standard Weiß', description: 'Reinweiß glänzend', price: 0, is_default: 1, sort_order: 1 },
-    { id: 12, category_id: 5, name: 'Aluminium', description: 'Aluminium-Optik', price: 650, is_default: 0, sort_order: 2 }
+    { id: 1, category_id: 1, name: 'Eiche Natur', description: 'Parkett Eiche, gebürstet', price: 0, is_default: 1, sort_order: 1, image_url: '' },
+    { id: 2, category_id: 1, name: 'Eiche Grau', description: 'Parkett Eiche, grau lasiert', price: 850, is_default: 0, sort_order: 2, image_url: '' },
+    { id: 3, category_id: 1, name: 'Nussbaum', description: 'Parkett Nussbaum, matt', price: 1200, is_default: 0, sort_order: 3, image_url: '' },
+    { id: 4, category_id: 2, name: 'Feinsteinzeug Weiß', description: 'Großformat 60x60', price: 0, is_default: 1, sort_order: 1, image_url: '' },
+    { id: 5, category_id: 2, name: 'Feinsteinzeug Anthrazit', description: 'Großformat 60x60', price: 450, is_default: 0, sort_order: 2, image_url: '' },
+    { id: 6, category_id: 3, name: 'Standard Paket', description: 'Wand-WC, Waschtisch 60cm', price: 0, is_default: 1, sort_order: 1, image_url: '' },
+    { id: 7, category_id: 3, name: 'Komfort Paket', description: 'Spülrandlos, Waschtisch 80cm', price: 1850, is_default: 0, sort_order: 2, image_url: '' },
+    { id: 8, category_id: 3, name: 'Premium Paket', description: 'Walk-In Dusche, Badewanne', price: 4200, is_default: 0, sort_order: 3, image_url: '' },
+    { id: 9, category_id: 4, name: 'Weiß lackiert', description: 'Glatte Oberfläche', price: 0, is_default: 1, sort_order: 1, image_url: '' },
+    { id: 10, category_id: 4, name: 'Eiche furniert', description: 'Echtholzfurnier', price: 420, is_default: 0, sort_order: 2, image_url: '' },
+    { id: 11, category_id: 5, name: 'Standard Weiß', description: 'Reinweiß glänzend', price: 0, is_default: 1, sort_order: 1, image_url: '' },
+    { id: 12, category_id: 5, name: 'Aluminium', description: 'Aluminium-Optik', price: 650, is_default: 0, sort_order: 2, image_url: '' }
   ]
 }
 
@@ -86,9 +94,353 @@ const Modal = ({ isOpen, onClose, title, children, size = '' }) => {
 }
 
 // ============================================
+// BILD-UPLOAD KOMPONENTE
+// ============================================
+const ImageUpload = ({ value, onChange }) => {
+  const [isDragging, setIsDragging] = useState(false)
+  const [isUploading, setIsUploading] = useState(false)
+  const [preview, setPreview] = useState(value || '')
+  const fileInputRef = useRef(null)
+
+  useEffect(() => {
+    setPreview(value || '')
+  }, [value])
+
+  const handleFile = async (file) => {
+    if (!file) return
+
+    // Validierung
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
+    if (!allowedTypes.includes(file.type)) {
+      alert('Ungültiger Dateityp. Erlaubt: JPG, PNG, WebP, GIF')
+      return
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      alert('Datei zu groß. Maximum: 5 MB')
+      return
+    }
+
+    // Preview erstellen
+    const reader = new FileReader()
+    reader.onload = (e) => setPreview(e.target.result)
+    reader.readAsDataURL(file)
+
+    // Upload
+    setIsUploading(true)
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+
+      const response = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        onChange(data.url)
+      } else {
+        throw new Error('Upload fehlgeschlagen')
+      }
+    } catch (error) {
+      console.error('Upload Error:', error)
+      // Im Demo-Modus: Preview als Data-URL verwenden
+      onChange(preview)
+    } finally {
+      setIsUploading(false)
+    }
+  }
+
+  const handleDrop = (e) => {
+    e.preventDefault()
+    setIsDragging(false)
+    const file = e.dataTransfer.files[0]
+    handleFile(file)
+  }
+
+  const handleDragOver = (e) => {
+    e.preventDefault()
+    setIsDragging(true)
+  }
+
+  const handleDragLeave = () => {
+    setIsDragging(false)
+  }
+
+  const handleClick = () => {
+    fileInputRef.current?.click()
+  }
+
+  const handleFileChange = (e) => {
+    const file = e.target.files[0]
+    handleFile(file)
+  }
+
+  const handleRemove = () => {
+    setPreview('')
+    onChange('')
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
+  }
+
+  return (
+    <div className="image-upload-container">
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp,image/gif"
+        onChange={handleFileChange}
+        style={{ display: 'none' }}
+      />
+
+      {preview ? (
+        <div className="image-preview">
+          <img src={preview} alt="Vorschau" />
+          <div className="image-preview-actions">
+            <button type="button" className="btn btn-sm btn-outline" onClick={handleClick}>
+              Ändern
+            </button>
+            <button type="button" className="btn btn-sm btn-ghost" onClick={handleRemove} style={{ color: 'var(--error)' }}>
+              <Trash2 size={16} />
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div
+          className={`image-dropzone ${isDragging ? 'dragging' : ''} ${isUploading ? 'uploading' : ''}`}
+          onDrop={handleDrop}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onClick={handleClick}
+        >
+          {isUploading ? (
+            <>
+              <div className="spinner" />
+              <span>Wird hochgeladen...</span>
+            </>
+          ) : (
+            <>
+              <ImagePlus size={32} />
+              <span>Bild hierher ziehen oder klicken</span>
+              <span className="image-dropzone-hint">JPG, PNG, WebP, GIF · Max. 5 MB</span>
+            </>
+          )}
+        </div>
+      )}
+
+      <style>{`
+        .image-upload-container {
+          width: 100%;
+        }
+        .image-dropzone {
+          border: 2px dashed var(--gray-300);
+          border-radius: var(--radius-md);
+          padding: 2rem;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 0.5rem;
+          cursor: pointer;
+          transition: all var(--transition-fast);
+          color: var(--gray-500);
+          background: var(--gray-50);
+        }
+        .image-dropzone:hover {
+          border-color: var(--gs-red);
+          color: var(--gs-red);
+          background: rgba(227, 6, 19, 0.02);
+        }
+        .image-dropzone.dragging {
+          border-color: var(--gs-red);
+          background: rgba(227, 6, 19, 0.05);
+          color: var(--gs-red);
+        }
+        .image-dropzone.uploading {
+          pointer-events: none;
+          opacity: 0.7;
+        }
+        .image-dropzone-hint {
+          font-size: 0.75rem;
+          color: var(--gray-400);
+        }
+        .image-preview {
+          position: relative;
+          border-radius: var(--radius-md);
+          overflow: hidden;
+          background: var(--gray-100);
+        }
+        .image-preview img {
+          width: 100%;
+          height: 150px;
+          object-fit: cover;
+          display: block;
+        }
+        .image-preview-actions {
+          position: absolute;
+          bottom: 0;
+          left: 0;
+          right: 0;
+          padding: 0.5rem;
+          background: linear-gradient(transparent, rgba(0,0,0,0.7));
+          display: flex;
+          justify-content: center;
+          gap: 0.5rem;
+        }
+        .image-preview-actions .btn {
+          background: white;
+        }
+      `}</style>
+    </div>
+  )
+}
+
+// ============================================
+// LOGIN-SEITE
+// ============================================
+const LoginPage = ({ onLogin }) => {
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
+
+  const handleSubmit = (e) => {
+    e.preventDefault()
+    setError('')
+    setLoading(true)
+
+    setTimeout(() => {
+      if (username === ADMIN_CREDENTIALS.username && password === ADMIN_CREDENTIALS.password) {
+        sessionStorage.setItem('adminAuth', 'true')
+        onLogin()
+      } else {
+        setError('Ungültige Zugangsdaten')
+      }
+      setLoading(false)
+    }, 500)
+  }
+
+  return (
+    <div className="login-page">
+      <div className="login-container">
+        <div className="login-header">
+          <img src="/logo.jpg" alt="G&S Gruppe" className="login-logo" />
+          <h1>Admin-Bereich</h1>
+          <p>Melden Sie sich an, um fortzufahren.</p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="login-form">
+          <div className="form-group">
+            <label className="form-label">Benutzername</label>
+            <input
+              type="text"
+              className="form-input"
+              value={username}
+              onChange={e => setUsername(e.target.value)}
+              autoFocus
+              autoComplete="username"
+            />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Passwort</label>
+            <input
+              type="password"
+              className="form-input"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              autoComplete="current-password"
+            />
+          </div>
+
+          {error && (
+            <div className="login-error">
+              <AlertCircle size={16} />
+              {error}
+            </div>
+          )}
+
+          <button type="submit" className="btn btn-primary btn-lg w-full" disabled={loading || !username || !password}>
+            {loading ? (
+              <>
+                <span className="spinner" style={{ width: 18, height: 18, borderWidth: 2 }} />
+                Wird überprüft...
+              </>
+            ) : (
+              <>
+                <Lock size={18} />
+                Anmelden
+              </>
+            )}
+          </button>
+        </form>
+      </div>
+
+      <style>{`
+        .login-page {
+          min-height: 100vh;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: var(--gray-100);
+          padding: 2rem;
+        }
+        .login-page::before {
+          content: '';
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          height: 4px;
+          background: var(--gs-red);
+        }
+        .login-container {
+          width: 100%;
+          max-width: 400px;
+          background: white;
+          border-radius: var(--radius-lg);
+          box-shadow: var(--shadow-lg);
+          padding: 2.5rem;
+        }
+        .login-header {
+          text-align: center;
+          margin-bottom: 2rem;
+        }
+        .login-logo {
+          height: 50px;
+          margin-bottom: 1.5rem;
+        }
+        .login-header h1 {
+          font-size: 1.5rem;
+          margin-bottom: 0.5rem;
+        }
+        .login-header p {
+          color: var(--gray-500);
+        }
+        .login-form .form-group {
+          margin-bottom: 1rem;
+        }
+        .login-error {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          padding: 0.75rem 1rem;
+          background: var(--error-light);
+          color: var(--error);
+          border-radius: var(--radius);
+          font-size: 0.875rem;
+          margin-bottom: 1rem;
+        }
+      `}</style>
+    </div>
+  )
+}
+
+// ============================================
 // PROJEKT-ÜBERSICHT (Hauptseite)
 // ============================================
-const ProjectList = ({ data, setData }) => {
+const ProjectList = ({ data, setData, onLogout }) => {
   const navigate = useNavigate()
   const [showModal, setShowModal] = useState(false)
   const [editProject, setEditProject] = useState(null)
@@ -146,8 +498,14 @@ const ProjectList = ({ data, setData }) => {
       {/* Header */}
       <header className="admin-header">
         <div className="admin-header-inner">
-          <img src="/logo.jpg" alt="G&S Gruppe" style={{ height: 40 }} />
-          <h1 style={{ fontSize: '1.25rem', fontWeight: 600 }}>Bemusterung Admin</h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
+            <img src="/logo.jpg" alt="G&S Gruppe" style={{ height: 40 }} />
+            <h1 style={{ fontSize: '1.25rem', fontWeight: 600 }}>Bemusterung Admin</h1>
+          </div>
+          <button className="btn btn-ghost" onClick={onLogout} style={{ color: 'white' }}>
+            <LogOut size={18} />
+            Abmelden
+          </button>
         </div>
       </header>
 
@@ -288,7 +646,7 @@ const ProjectList = ({ data, setData }) => {
           margin: 0 auto;
           display: flex;
           align-items: center;
-          gap: 1.5rem;
+          justify-content: space-between;
         }
         .admin-content {
           max-width: 1200px;
@@ -389,7 +747,7 @@ const ProjectList = ({ data, setData }) => {
 // ============================================
 // PROJEKT-DETAIL (Kategorien, Optionen, Wohnungen)
 // ============================================
-const ProjectDetail = ({ data, setData }) => {
+const ProjectDetail = ({ data, setData, onLogout }) => {
   const { projectId } = useParams()
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState('categories')
@@ -593,14 +951,22 @@ const ProjectDetail = ({ data, setData }) => {
       {/* Header */}
       <header className="admin-header">
         <div className="admin-header-inner">
-          <button className="btn btn-ghost" onClick={() => navigate('/admin')} style={{ color: 'white', marginRight: '1rem' }}>
-            <ArrowLeft size={20} />
-          </button>
-          <img src="/logo.jpg" alt="G&S Gruppe" style={{ height: 36 }} />
-          <div style={{ marginLeft: '1rem' }}>
-            <div style={{ fontSize: '0.75rem', opacity: 0.7 }}>Projekt</div>
-            <div style={{ fontWeight: 600 }}>{project.name}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+            <button className="back-button" onClick={() => navigate('/admin')}>
+              <ArrowLeft size={20} />
+              <span>Zurück</span>
+            </button>
+            <div className="header-divider" />
+            <img src="/logo.jpg" alt="G&S Gruppe" style={{ height: 36 }} />
+            <div style={{ marginLeft: '0.5rem' }}>
+              <div style={{ fontSize: '0.7rem', opacity: 0.6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Projekt</div>
+              <div style={{ fontWeight: 600, fontSize: '1rem' }}>{project.name}</div>
+            </div>
           </div>
+          <button className="btn btn-ghost" onClick={onLogout} style={{ color: 'white' }}>
+            <LogOut size={18} />
+            Abmelden
+          </button>
         </div>
       </header>
 
@@ -668,11 +1034,11 @@ const ProjectDetail = ({ data, setData }) => {
                           <table>
                             <thead>
                               <tr>
-                                <th style={{ width: 60 }}>Bild</th>
+                                <th style={{ width: 70 }}>Bild</th>
                                 <th>Option</th>
-                                <th>Preis</th>
+                                <th style={{ width: 120 }}>Preis</th>
                                 <th style={{ width: 80 }}>Standard</th>
-                                <th style={{ width: 100 }}></th>
+                                <th style={{ width: 90 }}></th>
                               </tr>
                             </thead>
                             <tbody>
@@ -680,10 +1046,10 @@ const ProjectDetail = ({ data, setData }) => {
                                 <tr key={option.id}>
                                   <td>
                                     {option.image_url ? (
-                                      <img src={option.image_url} alt="" style={{ width: 50, height: 38, objectFit: 'cover', borderRadius: 4 }} />
+                                      <img src={option.image_url} alt="" style={{ width: 56, height: 42, objectFit: 'cover', borderRadius: 4 }} />
                                     ) : (
-                                      <div style={{ width: 50, height: 38, background: 'var(--gray-100)', borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                        <Image size={16} color="var(--gray-300)" />
+                                      <div style={{ width: 56, height: 42, background: 'var(--gray-100)', borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                        <Image size={18} color="var(--gray-300)" />
                                       </div>
                                     )}
                                   </td>
@@ -711,7 +1077,7 @@ const ProjectDetail = ({ data, setData }) => {
                       )}
 
                       {categoryOptions.length === 0 && (
-                        <div style={{ padding: '1rem', textAlign: 'center', color: 'var(--gray-400)', fontSize: '0.875rem' }}>
+                        <div style={{ padding: '1.5rem', textAlign: 'center', color: 'var(--gray-400)', fontSize: '0.875rem' }}>
                           Noch keine Optionen. Klicken Sie auf "+ Option" um Auswahlmöglichkeiten hinzuzufügen.
                         </div>
                       )}
@@ -829,33 +1195,42 @@ const ProjectDetail = ({ data, setData }) => {
       </Modal>
 
       {/* OPTION MODAL */}
-      <Modal isOpen={showOptionModal} onClose={() => setShowOptionModal(false)} title={editItem ? 'Option bearbeiten' : 'Neue Option'}>
+      <Modal isOpen={showOptionModal} onClose={() => setShowOptionModal(false)} title={editItem ? 'Option bearbeiten' : 'Neue Option'} size="modal-lg">
         <div className="modal-body">
-          <div className="form-group">
-            <label className="form-label">Name *</label>
-            <input type="text" className="form-input" value={optionForm.name} onChange={e => setOptionForm({ ...optionForm, name: e.target.value })} placeholder="z.B. Eiche Natur" autoFocus />
-          </div>
-          <div className="form-group">
-            <label className="form-label">Beschreibung</label>
-            <textarea className="form-textarea" value={optionForm.description} onChange={e => setOptionForm({ ...optionForm, description: e.target.value })} placeholder="Details zur Option..." />
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-            <div className="form-group">
-              <label className="form-label">Preis (€)</label>
-              <input type="number" className="form-input" value={optionForm.price} onChange={e => setOptionForm({ ...optionForm, price: e.target.value })} step="0.01" />
-              <p className="form-hint">0 = Inklusive, positiv = Aufpreis, negativ = Ersparnis</p>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
+            <div>
+              <div className="form-group">
+                <label className="form-label">Name *</label>
+                <input type="text" className="form-input" value={optionForm.name} onChange={e => setOptionForm({ ...optionForm, name: e.target.value })} placeholder="z.B. Eiche Natur" autoFocus />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Beschreibung</label>
+                <textarea className="form-textarea" value={optionForm.description} onChange={e => setOptionForm({ ...optionForm, description: e.target.value })} placeholder="Details zur Option..." style={{ minHeight: 80 }} />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                <div className="form-group">
+                  <label className="form-label">Preis (€)</label>
+                  <input type="number" className="form-input" value={optionForm.price} onChange={e => setOptionForm({ ...optionForm, price: e.target.value })} step="0.01" />
+                  <p className="form-hint">0 = Inklusive</p>
+                </div>
+                <div className="form-group">
+                  <label className="form-label">&nbsp;</label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', marginTop: '0.5rem' }}>
+                    <input type="checkbox" checked={optionForm.is_default === 1} onChange={e => setOptionForm({ ...optionForm, is_default: e.target.checked ? 1 : 0 })} style={{ width: 18, height: 18 }} />
+                    <span>Standard</span>
+                  </label>
+                </div>
+              </div>
             </div>
-            <div className="form-group">
-              <label className="form-label">&nbsp;</label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', marginTop: '0.5rem' }}>
-                <input type="checkbox" checked={optionForm.is_default === 1} onChange={e => setOptionForm({ ...optionForm, is_default: e.target.checked ? 1 : 0 })} style={{ width: 18, height: 18 }} />
-                <span>Als Standard vorauswählen</span>
-              </label>
+            <div>
+              <div className="form-group">
+                <label className="form-label">Produktbild</label>
+                <ImageUpload
+                  value={optionForm.image_url}
+                  onChange={(url) => setOptionForm({ ...optionForm, image_url: url })}
+                />
+              </div>
             </div>
-          </div>
-          <div className="form-group">
-            <label className="form-label">Bild-URL</label>
-            <input type="text" className="form-input" value={optionForm.image_url} onChange={e => setOptionForm({ ...optionForm, image_url: e.target.value })} placeholder="https://..." />
           </div>
         </div>
         <div className="modal-footer">
@@ -867,7 +1242,7 @@ const ProjectDetail = ({ data, setData }) => {
       {/* WOHNUNG MODAL */}
       <Modal isOpen={showApartmentModal} onClose={() => setShowApartmentModal(false)} title={editItem ? 'Wohnung bearbeiten' : 'Neue Wohnung'} size="modal-lg">
         <div className="modal-body">
-          <h4 style={{ marginBottom: '1rem', color: 'var(--gray-500)', fontSize: '0.875rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Wohnungsdaten</h4>
+          <h4 style={{ marginBottom: '1rem', color: 'var(--gray-500)', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Wohnungsdaten</h4>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
             <div className="form-group">
               <label className="form-label">Bezeichnung *</label>
@@ -889,7 +1264,7 @@ const ProjectDetail = ({ data, setData }) => {
 
           <div className="gs-accent-line" style={{ margin: '1.5rem 0' }} />
 
-          <h4 style={{ marginBottom: '1rem', color: 'var(--gray-500)', fontSize: '0.875rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Kundendaten</h4>
+          <h4 style={{ marginBottom: '1rem', color: 'var(--gray-500)', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Kundendaten</h4>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
             <div className="form-group">
               <label className="form-label">Kundenname *</label>
@@ -921,6 +1296,28 @@ const ProjectDetail = ({ data, setData }) => {
       </Modal>
 
       <style>{`
+        .back-button {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          padding: 0.5rem 1rem;
+          background: rgba(255,255,255,0.1);
+          border: 1px solid rgba(255,255,255,0.2);
+          border-radius: var(--radius);
+          color: white;
+          font-size: 0.875rem;
+          font-weight: 500;
+          cursor: pointer;
+          transition: all var(--transition-fast);
+        }
+        .back-button:hover {
+          background: rgba(255,255,255,0.2);
+        }
+        .header-divider {
+          width: 1px;
+          height: 32px;
+          background: rgba(255,255,255,0.2);
+        }
         .tabs {
           display: flex;
           gap: 0.5rem;
@@ -1022,6 +1419,30 @@ const ProjectDetail = ({ data, setData }) => {
           font-size: 0.875rem !important;
           padding: 0.375rem 0.75rem !important;
         }
+        .admin-page {
+          min-height: 100vh;
+          background: var(--gray-50);
+        }
+        .admin-header {
+          background: var(--gs-black);
+          color: white;
+          padding: 1rem 2rem;
+          position: sticky;
+          top: 0;
+          z-index: 100;
+        }
+        .admin-header-inner {
+          max-width: 1200px;
+          margin: 0 auto;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+        }
+        .admin-content {
+          max-width: 1200px;
+          margin: 0 auto;
+          padding: 2rem;
+        }
       `}</style>
     </div>
   )
@@ -1031,12 +1452,28 @@ const ProjectDetail = ({ data, setData }) => {
 // HAUPT-ADMIN-KOMPONENTE
 // ============================================
 function Admin() {
+  const [isAuthenticated, setIsAuthenticated] = useState(() => {
+    return sessionStorage.getItem('adminAuth') === 'true'
+  })
   const [data, setData] = useState(INITIAL_DATA)
+
+  const handleLogin = () => {
+    setIsAuthenticated(true)
+  }
+
+  const handleLogout = () => {
+    sessionStorage.removeItem('adminAuth')
+    setIsAuthenticated(false)
+  }
+
+  if (!isAuthenticated) {
+    return <LoginPage onLogin={handleLogin} />
+  }
 
   return (
     <Routes>
-      <Route path="/" element={<ProjectList data={data} setData={setData} />} />
-      <Route path="/projekt/:projectId" element={<ProjectDetail data={data} setData={setData} />} />
+      <Route path="/" element={<ProjectList data={data} setData={setData} onLogout={handleLogout} />} />
+      <Route path="/projekt/:projectId" element={<ProjectDetail data={data} setData={setData} onLogout={handleLogout} />} />
     </Routes>
   )
 }

@@ -105,14 +105,6 @@ function Home() {
           </p>
         </div>
 
-        {/* Admin Link */}
-        <div className="home-admin-link">
-          <a href="/admin" className="btn btn-ghost">
-            <HomeIcon size={18} />
-            Zum Admin-Bereich
-          </a>
-        </div>
-
         {/* Footer */}
         <footer className="home-footer">
           <p>© {new Date().getFullYear()} G&S Gruppe. Alle Rechte vorbehalten.</p>
