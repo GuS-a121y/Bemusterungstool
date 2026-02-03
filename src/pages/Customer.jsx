@@ -1,6 +1,18 @@
 import React, { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ChevronLeft, ChevronRight, Check, Home, AlertCircle, CheckCircle2, Loader2, FileText } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Check, Home, AlertCircle, CheckCircle2, Loader2, FileText, ArrowRight } from 'lucide-react'
+
+// Footer Komponente
+const Footer = () => (
+  <footer className="customer-footer">
+    <div className="footer-links">
+      <a href="https://www.g-s-wohnbau.de/datenschutz" target="_blank" rel="noopener noreferrer">Datenschutz</a>
+      <span>|</span>
+      <a href="https://www.g-s-wohnbau.de/impressum" target="_blank" rel="noopener noreferrer">Impressum</a>
+    </div>
+    <div className="footer-copyright">© {new Date().getFullYear()} G&S Gruppe</div>
+  </footer>
+)
 
 function Customer() {
   const { code } = useParams()
@@ -10,7 +22,7 @@ function Customer() {
   const [error, setError] = useState(null)
   const [apartment, setApartment] = useState(null)
   const [categories, setCategories] = useState([])
-  const [currentStep, setCurrentStep] = useState(0)
+  const [currentStep, setCurrentStep] = useState(-1) // -1 = Einleitungsseite
   const [selections, setSelections] = useState({})
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isCompleted, setIsCompleted] = useState(false)
@@ -35,6 +47,7 @@ function Customer() {
         if (data.apartment.status === 'abgeschlossen') {
           setSelections(data.selections || {})
           setIsCompleted(true)
+          setCurrentStep(data.categories.length) // Zeige Übersicht
           setLoading(false)
           return
         }
@@ -79,6 +92,7 @@ function Customer() {
   // Navigation
   const nextStep = () => { if (currentStep < categories.length) setCurrentStep(prev => prev + 1) }
   const prevStep = () => { if (currentStep > 0) setCurrentStep(prev => prev - 1) }
+  const startBemusterung = () => setCurrentStep(0)
 
   // Absenden
   const handleSubmit = async () => {
@@ -122,11 +136,7 @@ function Customer() {
       <div className="wizard-loading">
         <Loader2 className="animate-spin" size={40} />
         <p>Bemusterung wird geladen...</p>
-        <style>{`
-          .wizard-loading { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1rem; color: var(--gray-500); }
-          .animate-spin { animation: spin 1s linear infinite; }
-          @keyframes spin { to { transform: rotate(360deg); } }
-        `}</style>
+        <style>{wizardStyles}</style>
       </div>
     )
   }
@@ -134,19 +144,17 @@ function Customer() {
   // Error
   if (error) {
     return (
-      <div className="wizard-container">
-        <div className="wizard-error">
-          <AlertCircle size={48} />
-          <h2>Fehler</h2>
-          <p>{error}</p>
-          <button className="btn btn-primary" onClick={() => navigate('/')}>Zurück zur Startseite</button>
+      <div className="wizard-page">
+        <div className="wizard-container">
+          <div className="wizard-error">
+            <AlertCircle size={48} />
+            <h2>Fehler</h2>
+            <p>{error}</p>
+            <button className="btn btn-primary" onClick={() => navigate('/')}>Zurück zur Startseite</button>
+          </div>
         </div>
-        <style>{`
-          .wizard-container { max-width: 600px; margin: 0 auto; padding: 2rem; }
-          .wizard-error { text-align: center; padding: 3rem; background: white; border-radius: 12px; box-shadow: var(--shadow-lg); }
-          .wizard-error h2 { margin: 1rem 0 0.5rem; }
-          .wizard-error svg { color: var(--error); }
-        `}</style>
+        <Footer />
+        <style>{wizardStyles}</style>
       </div>
     )
   }
@@ -154,48 +162,115 @@ function Customer() {
   // Completed
   if (isCompleted) {
     return (
-      <div className="wizard-container">
-        <div className="wizard-header">
-          <img src="/logo.jpg" alt="G&S Gruppe" className="wizard-logo" />
-        </div>
-        <div className="wizard-content" style={{ textAlign: 'center', padding: '3rem 2rem' }}>
-          <div style={{ width: 80, height: 80, background: 'var(--success-light)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.5rem' }}>
-            <CheckCircle2 size={40} color="var(--success)" />
+      <div className="wizard-page">
+        <header className="wizard-page-header">
+          <div className="wizard-page-header-inner">
+            {apartment?.project?.logo ? (
+              <img src={apartment.project.logo} alt={apartment.project.name} style={{ height: 40 }} />
+            ) : (
+              <img src="/logo.jpg" alt="G&S Gruppe" style={{ height: 40 }} />
+            )}
+            <div className="wizard-apartment-info">
+              <span style={{ fontWeight: 600 }}>{apartment?.project?.name}</span>
+            </div>
           </div>
-          <h2 style={{ marginBottom: '0.5rem' }}>Bemusterung erfolgreich abgeschlossen!</h2>
-          <p style={{ color: 'var(--gray-500)', maxWidth: 450, margin: '0 auto 2rem' }}>
-            Vielen Dank! Ihre Auswahl wurde verbindlich übermittelt. 
-            Ein Protokoll wurde automatisch in einem neuen Tab geöffnet - 
-            bitte speichern Sie dieses als PDF für Ihre Unterlagen.
-          </p>
-          
-          {categories.length > 0 && (
-            <div style={{ background: 'var(--gray-50)', borderRadius: '12px', padding: '1.5rem', marginBottom: '2rem', textAlign: 'left' }}>
-              <h4 style={{ marginBottom: '1rem' }}>Ihre Auswahl im Überblick</h4>
-              {categories.map(cat => {
-                const selectedOption = cat.options.find(o => o.id === selections[cat.id])
-                return selectedOption && (
-                  <div key={cat.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.75rem 0', borderBottom: '1px solid var(--gray-200)' }}>
-                    <div>
-                      <div style={{ fontWeight: 500 }}>{cat.name}</div>
-                      <div style={{ fontSize: '0.875rem', color: 'var(--gray-500)' }}>{selectedOption.name}</div>
+        </header>
+        
+        <div className="wizard-container">
+          <div className="wizard-content" style={{ textAlign: 'center', padding: '3rem 2rem' }}>
+            <div style={{ width: 80, height: 80, background: 'var(--success-light)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.5rem' }}>
+              <CheckCircle2 size={40} color="var(--success)" />
+            </div>
+            <h2 style={{ marginBottom: '0.5rem' }}>Bemusterung erfolgreich abgeschlossen!</h2>
+            <p style={{ color: 'var(--gray-500)', maxWidth: 450, margin: '0 auto 2rem' }}>
+              Vielen Dank! Ihre Auswahl wurde verbindlich übermittelt. 
+              Ein Protokoll wurde automatisch in einem neuen Tab geöffnet - 
+              bitte speichern Sie dieses als PDF für Ihre Unterlagen.
+            </p>
+            
+            {categories.length > 0 && (
+              <div style={{ background: 'var(--gray-50)', borderRadius: '12px', padding: '1.5rem', marginBottom: '2rem', textAlign: 'left' }}>
+                <h4 style={{ marginBottom: '1rem' }}>Ihre Auswahl im Überblick</h4>
+                {categories.map(cat => {
+                  const selectedOption = cat.options.find(o => o.id === selections[cat.id])
+                  return selectedOption && (
+                    <div key={cat.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.75rem 0', borderBottom: '1px solid var(--gray-200)' }}>
+                      <div>
+                        <div style={{ fontWeight: 500 }}>{cat.name}</div>
+                        <div style={{ fontSize: '0.875rem', color: 'var(--gray-500)' }}>{selectedOption.name}</div>
+                      </div>
+                      <div style={{ fontWeight: 600 }}>{formatPrice(selectedOption.price)}</div>
                     </div>
-                    <div style={{ fontWeight: 600 }}>{formatPrice(selectedOption.price)}</div>
-                  </div>
-                )
-              })}
-              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '1rem 0 0', fontWeight: 700, fontSize: '1.125rem' }}>
-                <span>Gesamt Mehrpreis</span>
-                <span>{calculateTotal() >= 0 ? '+' : ''}{calculateTotal().toLocaleString('de-DE')} €</span>
+                  )
+                })}
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '1rem 0 0', fontWeight: 700, fontSize: '1.125rem' }}>
+                  <span>Gesamt Mehrpreis</span>
+                  <span>{calculateTotal() >= 0 ? '+' : ''}{calculateTotal().toLocaleString('de-DE')} €</span>
+                </div>
               </div>
+            )}
+
+            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
+              <button className="btn btn-primary" onClick={() => window.open(`/api/pdf?code=${code.toUpperCase()}`, '_blank')}><FileText size={18} /> PDF herunterladen</button>
+              <button className="btn btn-outline" onClick={() => navigate('/')}><Home size={18} /> Zur Startseite</button>
+            </div>
+          </div>
+        </div>
+        <Footer />
+        <style>{wizardStyles}</style>
+      </div>
+    )
+  }
+
+  // Einleitungsseite
+  if (currentStep === -1) {
+    const defaultIntroText = `Herzlich willkommen zur digitalen Bemusterung für Ihre neue Wohnung!
+
+In den folgenden Schritten können Sie die Ausstattung Ihrer Wohnung ganz nach Ihren Wünschen auswählen. Für jede Kategorie stehen Ihnen verschiedene Optionen zur Verfügung - von der Basisausstattung bis zu hochwertigen Upgrades.
+
+Nehmen Sie sich Zeit für Ihre Auswahl. Am Ende erhalten Sie eine Übersicht und können Ihre Entscheidung verbindlich bestätigen.`
+
+    return (
+      <div className="wizard-page">
+        <header className="wizard-page-header">
+          <div className="wizard-page-header-inner">
+            {apartment?.project?.logo ? (
+              <img src={apartment.project.logo} alt={apartment.project.name} style={{ height: 40 }} />
+            ) : (
+              <img src="/logo.jpg" alt="G&S Gruppe" style={{ height: 40 }} />
+            )}
+          </div>
+        </header>
+
+        <div className="intro-container">
+          {apartment?.project?.image && (
+            <div className="intro-image">
+              <img src={apartment.project.image} alt={apartment.project.name} />
             </div>
           )}
+          
+          <div className="intro-content">
+            <div className="intro-badge">Digitale Bemusterung</div>
+            <h1>{apartment?.project?.name}</h1>
+            {apartment?.project?.address && <p className="intro-address">{apartment.project.address}</p>}
+            
+            <div className="intro-welcome">
+              <p>Willkommen, <strong>{apartment?.customer_name || 'Kunde'}</strong>!</p>
+              <p className="intro-apartment">Wohnung: <strong>{apartment?.name}</strong></p>
+            </div>
 
-          <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
-            <button className="btn btn-primary" onClick={() => window.open(`/api/pdf?code=${code.toUpperCase()}`, '_blank')}><FileText size={18} /> PDF herunterladen</button>
-            <button className="btn btn-outline" onClick={() => navigate('/')}><Home size={18} /> Zur Startseite</button>
+            <div className="intro-text">
+              {(apartment?.project?.intro_text || defaultIntroText).split('\n').map((line, i) => (
+                <p key={i}>{line}</p>
+              ))}
+            </div>
+
+            <button className="btn btn-primary btn-lg" onClick={startBemusterung}>
+              Bemusterung starten <ArrowRight size={20} />
+            </button>
           </div>
         </div>
+        <Footer />
         <style>{wizardStyles}</style>
       </div>
     )
@@ -209,7 +284,11 @@ function Customer() {
     <div className="wizard-page">
       <header className="wizard-page-header">
         <div className="wizard-page-header-inner">
-          <img src="/logo.jpg" alt="G&S Gruppe" style={{ height: 40 }} />
+          {apartment?.project?.logo ? (
+            <img src={apartment.project.logo} alt={apartment.project.name} style={{ height: 40 }} />
+          ) : (
+            <img src="/logo.jpg" alt="G&S Gruppe" style={{ height: 40 }} />
+          )}
           <div className="wizard-apartment-info">
             <span style={{ fontWeight: 600 }}>{apartment?.project?.name}</span>
             <span style={{ color: 'var(--gray-400)' }}>·</span>
@@ -321,20 +400,47 @@ function Customer() {
           </div>
         </div>
       </div>
-
+      <Footer />
       <style>{wizardStyles}</style>
     </div>
   )
 }
 
 const wizardStyles = `
-  .wizard-page { min-height: 100vh; background: var(--gray-50); }
+  .wizard-page { min-height: 100vh; background: var(--gray-50); display: flex; flex-direction: column; }
   .wizard-page-header { background: white; border-bottom: 1px solid var(--gray-200); padding: 1rem 2rem; position: sticky; top: 0; z-index: 100; }
   .wizard-page-header-inner { max-width: 900px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; }
   .wizard-apartment-info { display: flex; align-items: center; gap: 0.5rem; font-size: 0.9375rem; color: var(--gray-600); }
-  .wizard-container { max-width: 900px; margin: 0 auto; padding: 2rem; padding-top: 1.5rem; }
-  .wizard-header { text-align: center; margin-bottom: 2rem; }
-  .wizard-logo { height: 50px; }
+  .wizard-container { max-width: 900px; margin: 0 auto; padding: 2rem; padding-top: 1.5rem; flex: 1; }
+  .wizard-loading { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1rem; color: var(--gray-500); }
+  .wizard-error { text-align: center; padding: 3rem; background: white; border-radius: 12px; box-shadow: var(--shadow-lg); }
+  .wizard-error h2 { margin: 1rem 0 0.5rem; }
+  .wizard-error svg { color: var(--error); }
+  
+  /* Intro Page */
+  .intro-container { max-width: 800px; margin: 0 auto; padding: 2rem; flex: 1; }
+  .intro-image { border-radius: 12px; overflow: hidden; margin-bottom: 2rem; box-shadow: var(--shadow-lg); }
+  .intro-image img { width: 100%; height: 300px; object-fit: cover; }
+  .intro-content { background: white; border-radius: 12px; padding: 2.5rem; box-shadow: var(--shadow); }
+  .intro-badge { display: inline-block; background: var(--gs-red); color: white; padding: 0.375rem 1rem; border-radius: 9999px; font-size: 0.8125rem; font-weight: 600; margin-bottom: 1rem; }
+  .intro-content h1 { font-size: 2rem; margin: 0 0 0.5rem; }
+  .intro-address { color: var(--gray-500); margin-bottom: 1.5rem; }
+  .intro-welcome { background: var(--gray-50); padding: 1.25rem; border-radius: 8px; margin-bottom: 1.5rem; }
+  .intro-welcome p { margin: 0; }
+  .intro-apartment { margin-top: 0.5rem !important; color: var(--gray-600); }
+  .intro-text { color: var(--gray-600); line-height: 1.7; margin-bottom: 2rem; }
+  .intro-text p { margin: 0 0 1rem; }
+  .intro-text p:last-child { margin-bottom: 0; }
+  
+  /* Footer */
+  .customer-footer { background: white; border-top: 1px solid var(--gray-200); padding: 1.5rem 2rem; text-align: center; }
+  .footer-links { display: flex; justify-content: center; gap: 1rem; margin-bottom: 0.5rem; }
+  .footer-links a { color: var(--gray-600); text-decoration: none; font-size: 0.875rem; }
+  .footer-links a:hover { color: var(--gs-red); }
+  .footer-links span { color: var(--gray-300); }
+  .footer-copyright { color: var(--gray-400); font-size: 0.8125rem; }
+  
+  /* Wizard Progress */
   .wizard-progress { display: flex; align-items: center; justify-content: center; margin-bottom: 2rem; overflow-x: auto; padding-bottom: 0.5rem; }
   .wizard-step { display: flex; align-items: center; gap: 0.5rem; }
   .step-number { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.875rem; font-weight: 600; background: var(--gray-200); color: var(--gray-500); flex-shrink: 0; }
@@ -344,6 +450,8 @@ const wizardStyles = `
   @media (min-width: 768px) { .step-label { display: block; } .step-label.active { color: var(--gs-black); font-weight: 500; } }
   .step-connector { width: 40px; height: 2px; background: var(--gray-200); margin: 0 0.5rem; flex-shrink: 0; }
   .step-connector.completed { background: var(--success); }
+  
+  /* Wizard Content */
   .wizard-content { background: white; border-radius: 12px; box-shadow: var(--shadow-lg); padding: 2rem; }
   .option-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 1.5rem; margin: 1.5rem 0; }
   .option-card { position: relative; border: 2px solid var(--gray-200); border-radius: 8px; overflow: hidden; cursor: pointer; transition: all 0.2s; }
@@ -357,9 +465,13 @@ const wizardStyles = `
   .option-price { font-size: 1rem; font-weight: 600; }
   .option-check { position: absolute; top: 0.75rem; right: 0.75rem; width: 28px; height: 28px; background: var(--gs-red); color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
   .custom-tag { display: inline-block; padding: 0.125rem 0.5rem; background: var(--info); color: white; font-size: 0.6875rem; border-radius: 9999px; font-weight: 600; }
+  
+  /* Wizard Footer */
   .wizard-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid var(--gray-200); }
   .wizard-total-label { color: var(--gray-500); font-size: 0.875rem; }
   .wizard-total-value { font-weight: 700; font-family: 'Space Grotesk', sans-serif; font-size: 1.25rem; }
+  
+  /* Overview */
   .overview-list { border: 1px solid var(--gray-200); border-radius: 8px; overflow: hidden; }
   .overview-item { display: flex; align-items: center; padding: 1rem 1.25rem; border-bottom: 1px solid var(--gray-100); gap: 1rem; }
   .overview-item:last-child { border-bottom: none; }
@@ -371,12 +483,17 @@ const wizardStyles = `
   .overview-total-label { font-weight: 600; font-size: 1.125rem; }
   .overview-total-note { font-size: 0.8125rem; opacity: 0.7; }
   .overview-total-value { font-family: 'Space Grotesk', sans-serif; font-size: 1.5rem; font-weight: 700; }
+  
   .animate-spin { animation: spin 1s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
+  
   @media (max-width: 768px) {
     .wizard-page-header { padding: 0.75rem 1rem; }
     .wizard-apartment-info { display: none; }
     .wizard-container { padding: 1rem; }
+    .intro-container { padding: 1rem; }
+    .intro-content { padding: 1.5rem; }
+    .intro-content h1 { font-size: 1.5rem; }
     .wizard-footer { flex-direction: column; gap: 1rem; }
     .wizard-footer > div:last-child { width: 100%; display: flex; }
     .wizard-footer .btn { flex: 1; }

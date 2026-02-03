@@ -16,7 +16,8 @@ export async function onRequestGet(context) {
       SELECT 
         a.id, a.name, a.floor, a.size_sqm, a.rooms, 
         a.customer_name, a.customer_email, a.status,
-        p.id as project_id, p.name as project_name, p.address as project_address
+        p.id as project_id, p.name as project_name, p.address as project_address,
+        p.intro_text as project_intro_text, p.project_logo, p.project_image
       FROM apartments a
       JOIN projects p ON a.project_id = p.id
       WHERE a.access_code = ?
@@ -107,7 +108,10 @@ export async function onRequestGet(context) {
         project: {
           id: apartment.project_id,
           name: apartment.project_name,
-          address: apartment.project_address
+          address: apartment.project_address,
+          intro_text: apartment.project_intro_text,
+          logo: apartment.project_logo,
+          image: apartment.project_image
         }
       },
       categories,

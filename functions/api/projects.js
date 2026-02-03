@@ -30,16 +30,24 @@ export async function onRequestPost(context) {
   const { request, env } = context
 
   try {
-    const { name, description, address, status } = await request.json()
+    const { name, description, address, intro_text, project_logo, project_image, status } = await request.json()
 
     if (!name?.trim()) {
       return Response.json({ error: 'Name ist erforderlich' }, { status: 400 })
     }
 
     const result = await env.DB.prepare(`
-      INSERT INTO projects (name, description, address, status)
-      VALUES (?, ?, ?, ?)
-    `).bind(name.trim(), description || '', address || '', status || 'aktiv').run()
+      INSERT INTO projects (name, description, address, intro_text, project_logo, project_image, status)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      name.trim(), 
+      description || '', 
+      address || '', 
+      intro_text || '',
+      project_logo || null,
+      project_image || null,
+      status || 'aktiv'
+    ).run()
 
     return Response.json({ 
       success: true, 
@@ -55,7 +63,7 @@ export async function onRequestPut(context) {
   const { request, env } = context
 
   try {
-    const { id, name, description, address, status } = await request.json()
+    const { id, name, description, address, intro_text, project_logo, project_image, status } = await request.json()
 
     if (!id || !name?.trim()) {
       return Response.json({ error: 'ID und Name sind erforderlich' }, { status: 400 })
@@ -63,9 +71,18 @@ export async function onRequestPut(context) {
 
     await env.DB.prepare(`
       UPDATE projects 
-      SET name = ?, description = ?, address = ?, status = ?, updated_at = CURRENT_TIMESTAMP
+      SET name = ?, description = ?, address = ?, intro_text = ?, project_logo = ?, project_image = ?, status = ?, updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
-    `).bind(name.trim(), description || '', address || '', status || 'aktiv', id).run()
+    `).bind(
+      name.trim(), 
+      description || '', 
+      address || '', 
+      intro_text || '',
+      project_logo || null,
+      project_image || null,
+      status || 'aktiv', 
+      id
+    ).run()
 
     return Response.json({ success: true })
   } catch (error) {

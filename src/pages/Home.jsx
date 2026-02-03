@@ -105,6 +105,11 @@ function Home() {
 
         {/* Footer */}
         <footer className="home-footer">
+          <div className="home-footer-links">
+            <a href="https://www.g-s-wohnbau.de/datenschutz" target="_blank" rel="noopener noreferrer">Datenschutz</a>
+            <span>|</span>
+            <a href="https://www.g-s-wohnbau.de/impressum" target="_blank" rel="noopener noreferrer">Impressum</a>
+          </div>
           <p>© {new Date().getFullYear()} G&S Gruppe. Alle Rechte vorbehalten.</p>
         </footer>
       </div>
@@ -226,6 +231,26 @@ function Home() {
           margin-top: 2rem;
           color: var(--gray-400);
           font-size: 0.8125rem;
+        }
+
+        .home-footer-links {
+          display: flex;
+          justify-content: center;
+          gap: 0.75rem;
+          margin-bottom: 0.5rem;
+        }
+
+        .home-footer-links a {
+          color: var(--gray-500);
+          text-decoration: none;
+        }
+
+        .home-footer-links a:hover {
+          color: var(--gs-red);
+        }
+
+        .home-footer-links span {
+          color: var(--gray-300);
         }
 
         @media (max-width: 480px) {

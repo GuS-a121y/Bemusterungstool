@@ -91,7 +91,7 @@ const Modal = ({ isOpen, onClose, title, children, size = '' }) => {
   )
 }
 
-const ImageUpload = ({ value, onChange }) => {
+const ImageUpload = ({ value, onChange, label = 'Bild hinzufügen', height = 120 }) => {
   const [isDragging, setIsDragging] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [preview, setPreview] = useState(value || '')
@@ -133,7 +133,7 @@ const ImageUpload = ({ value, onChange }) => {
       <input ref={fileRef} type="file" accept="image/*" onChange={e => handleFile(e.target.files[0])} style={{ display: 'none' }} />
       {preview ? (
         <div style={{ position: 'relative', borderRadius: 8, overflow: 'hidden' }}>
-          <img src={preview} alt="" style={{ width: '100%', height: 120, objectFit: 'cover' }} />
+          <img src={preview} alt="" style={{ width: '100%', height, objectFit: 'cover' }} />
           <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: 8, background: 'linear-gradient(transparent, rgba(0,0,0,0.7))', display: 'flex', justifyContent: 'center', gap: 8 }}>
             <button type="button" className="btn btn-sm btn-outline" style={{ background: 'white' }} onClick={() => fileRef.current?.click()}>Ändern</button>
             <button type="button" className="btn btn-sm btn-ghost" style={{ background: 'white', color: 'var(--error)' }} onClick={() => { setPreview(''); onChange('') }}><Trash2 size={16} /></button>
@@ -148,7 +148,7 @@ const ImageUpload = ({ value, onChange }) => {
           style={{ border: '2px dashed var(--gray-300)', borderRadius: 8, padding: '1.5rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, cursor: 'pointer', color: 'var(--gray-500)', background: isDragging ? 'rgba(227,6,19,0.05)' : 'var(--gray-50)' }}
         >
           {uploading ? <Loader2 className="animate-spin" size={24} /> : <ImagePlus size={28} />}
-          <span style={{ fontSize: '0.875rem' }}>{uploading ? 'Hochladen...' : 'Bild hinzufügen'}</span>
+          <span style={{ fontSize: '0.875rem' }}>{uploading ? 'Hochladen...' : label}</span>
         </div>
       )}
     </div>
@@ -202,8 +202,9 @@ const ProjectList = ({ onLogout }) => {
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [editProject, setEditProject] = useState(null)
-  const [formData, setFormData] = useState({ name: '', description: '', address: '' })
+  const [formData, setFormData] = useState({ name: '', description: '', address: '', intro_text: '', project_logo: '', project_image: '' })
   const [saving, setSaving] = useState(false)
+  const [activeTab, setActiveTab] = useState('basic')
 
   const loadData = useCallback(async () => {
     setLoading(true)
@@ -219,7 +220,22 @@ const ProjectList = ({ onLogout }) => {
 
   const openModal = (project = null) => {
     setEditProject(project)
-    setFormData(project ? { name: project.name, description: project.description || '', address: project.address || '' } : { name: '', description: '', address: '' })
+    setFormData(project ? { 
+      name: project.name, 
+      description: project.description || '', 
+      address: project.address || '',
+      intro_text: project.intro_text || '',
+      project_logo: project.project_logo || '',
+      project_image: project.project_image || ''
+    } : { 
+      name: '', 
+      description: '', 
+      address: '',
+      intro_text: '',
+      project_logo: '',
+      project_image: ''
+    })
+    setActiveTab('basic')
     setShowModal(true)
   }
 
@@ -272,7 +288,11 @@ const ProjectList = ({ onLogout }) => {
             return (
               <div key={project.id} className="project-card" onClick={() => navigate(`/admin/projekt/${project.id}`)}>
                 <div className="project-card-header">
-                  <Building2 size={24} />
+                  {project.project_logo ? (
+                    <img src={project.project_logo} alt="" style={{ height: 28, maxWidth: 120, objectFit: 'contain' }} />
+                  ) : (
+                    <Building2 size={24} />
+                  )}
                   <div className="project-card-actions">
                     <button className="btn btn-ghost btn-icon btn-sm" onClick={e => { e.stopPropagation(); openModal(project) }}><Edit2 size={16} /></button>
                     <button className="btn btn-ghost btn-icon btn-sm" onClick={e => handleDelete(e, project.id)} style={{ color: 'var(--error)' }}><Trash2 size={16} /></button>
@@ -300,11 +320,50 @@ const ProjectList = ({ onLogout }) => {
           )}
         </div>
       </div>
-      <Modal isOpen={showModal} onClose={() => setShowModal(false)} title={editProject ? 'Projekt bearbeiten' : 'Neues Projekt'}>
+      
+      <Modal isOpen={showModal} onClose={() => setShowModal(false)} title={editProject ? 'Projekt bearbeiten' : 'Neues Projekt'} size="modal-lg">
+        <div className="modal-tabs">
+          <button className={`modal-tab ${activeTab === 'basic' ? 'active' : ''}`} onClick={() => setActiveTab('basic')}>Grunddaten</button>
+          <button className={`modal-tab ${activeTab === 'intro' ? 'active' : ''}`} onClick={() => setActiveTab('intro')}>Einleitungsseite</button>
+        </div>
         <div className="modal-body">
-          <div className="form-group"><label className="form-label">Name *</label><input type="text" className="form-input" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} autoFocus /></div>
-          <div className="form-group"><label className="form-label">Beschreibung</label><textarea className="form-textarea" value={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })} /></div>
-          <div className="form-group"><label className="form-label">Adresse</label><input type="text" className="form-input" value={formData.address} onChange={e => setFormData({ ...formData, address: e.target.value })} /></div>
+          {activeTab === 'basic' && (
+            <>
+              <div className="form-group"><label className="form-label">Projektname *</label><input type="text" className="form-input" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} autoFocus /></div>
+              <div className="form-group"><label className="form-label">Beschreibung</label><textarea className="form-textarea" value={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })} /></div>
+              <div className="form-group"><label className="form-label">Adresse</label><input type="text" className="form-input" value={formData.address} onChange={e => setFormData({ ...formData, address: e.target.value })} /></div>
+            </>
+          )}
+          {activeTab === 'intro' && (
+            <>
+              <p style={{ color: 'var(--gray-500)', marginBottom: '1.5rem', fontSize: '0.9375rem' }}>
+                Gestalten Sie die Einleitungsseite, die Kunden nach dem Login sehen.
+              </p>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '1.5rem' }}>
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label className="form-label">Projektlogo</label>
+                  <ImageUpload value={formData.project_logo} onChange={url => setFormData({ ...formData, project_logo: url })} label="Logo hochladen" height={80} />
+                  <p className="form-hint">Wird im Header angezeigt</p>
+                </div>
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label className="form-label">Projektbild</label>
+                  <ImageUpload value={formData.project_image} onChange={url => setFormData({ ...formData, project_image: url })} label="Bild hochladen" height={80} />
+                  <p className="form-hint">Titelbild der Einleitung</p>
+                </div>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Einleitungstext</label>
+                <textarea 
+                  className="form-textarea" 
+                  value={formData.intro_text} 
+                  onChange={e => setFormData({ ...formData, intro_text: e.target.value })}
+                  placeholder="Herzlich willkommen zur digitalen Bemusterung für Ihre neue Wohnung!&#10;&#10;In den folgenden Schritten können Sie die Ausstattung Ihrer Wohnung ganz nach Ihren Wünschen auswählen..."
+                  style={{ minHeight: 150 }}
+                />
+                <p className="form-hint">Leer lassen für Standardtext. Zeilenumbrüche werden übernommen.</p>
+              </div>
+            </>
+          )}
         </div>
         <div className="modal-footer">
           <button className="btn btn-outline" onClick={() => setShowModal(false)}>Abbrechen</button>
@@ -317,7 +376,7 @@ const ProjectList = ({ onLogout }) => {
 }
 
 // ============================================
-// PROJEKT-DETAIL
+// PROJEKT-DETAIL (Kategorien, Optionen, Wohnungen)
 // ============================================
 const ProjectDetail = ({ onLogout }) => {
   const { projectId } = useParams()
@@ -542,7 +601,6 @@ const ProjectDetail = ({ onLogout }) => {
   const saveCustomOption = async () => {
     if (!customForm.name.trim()) return
     
-    // Prüfen ob Kategorie gewählt oder neue eingegeben
     const useNewCat = customForm.use_new_category
     if (useNewCat && !customForm.new_category_name.trim()) {
       setError('Bitte Kategoriename eingeben')
@@ -559,7 +617,6 @@ const ProjectDetail = ({ onLogout }) => {
     try {
       let categoryId = parseInt(customForm.category_id)
       
-      // Wenn neue Kategorie gewünscht, erst erstellen
       if (useNewCat) {
         const catResult = await api.post('/categories', {
           project_id: parseInt(projectId),
@@ -568,12 +625,10 @@ const ProjectDetail = ({ onLogout }) => {
           sort_order: categories.length + 1
         })
         categoryId = catResult.id
-        // Kategorien neu laden
         const catRes = await api.get(`/categories?project_id=${projectId}`)
         setCategories(catRes.categories || [])
       }
       
-      // Individuelle Option erstellen
       const res = await api.post('/apartment-options', {
         action: 'add_custom',
         apartment_id: selectedApartment.id,
@@ -586,7 +641,7 @@ const ProjectDetail = ({ onLogout }) => {
       
       setCustomOptions(prev => [...prev, res.option])
       setShowCustomModal(false)
-      loadData() // Reload um neue Kategorie anzuzeigen
+      loadData()
     } catch (err) { setError(err.message) }
     setSaving(false)
   }
@@ -608,7 +663,11 @@ const ProjectDetail = ({ onLogout }) => {
           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
             <button className="back-button" onClick={() => navigate('/admin')}><ArrowLeft size={20} /><span>Zurück</span></button>
             <div style={{ width: 1, height: 32, background: 'rgba(255,255,255,0.2)' }} />
-            <img src="/logo.jpg" alt="" style={{ height: 36 }} />
+            {project.project_logo ? (
+              <img src={project.project_logo} alt="" style={{ height: 32 }} />
+            ) : (
+              <img src="/logo.jpg" alt="" style={{ height: 36 }} />
+            )}
             <div><div style={{ fontSize: '0.7rem', opacity: 0.6, textTransform: 'uppercase' }}>Projekt</div><div style={{ fontWeight: 600 }}>{project.name}</div></div>
           </div>
           <button className="btn btn-ghost" onClick={onLogout} style={{ color: 'white' }}><LogOut size={18} /> Abmelden</button>
@@ -758,13 +817,7 @@ const ProjectDetail = ({ onLogout }) => {
           <p style={{ color: 'var(--gray-500)', marginBottom: '1rem' }}>Geben Sie eine Wohnung pro Zeile ein. Felder mit Semikolon trennen:</p>
           <p style={{ fontFamily: 'monospace', fontSize: '0.8125rem', background: 'var(--gray-100)', padding: '0.75rem', borderRadius: 6, marginBottom: '1rem' }}>Name;Etage;m²;Zimmer;Kundenname;Email</p>
           {error && <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0.75rem', background: 'var(--error-light)', color: 'var(--error)', borderRadius: 8, marginBottom: '1rem', fontSize: '0.875rem' }}><AlertCircle size={16} />{error}</div>}
-          <textarea 
-            className="form-textarea" 
-            value={batchText} 
-            onChange={e => setBatchText(e.target.value)} 
-            placeholder="Wohnung 1.01;EG;78.5;3;Familie Müller;mueller@email.de&#10;Wohnung 1.02;EG;92;4;Herr Schmidt;schmidt@email.de&#10;Wohnung 2.01;1.OG;85;3;Frau Weber;"
-            style={{ minHeight: 200, fontFamily: 'monospace', fontSize: '0.875rem' }}
-          />
+          <textarea className="form-textarea" value={batchText} onChange={e => setBatchText(e.target.value)} placeholder="Wohnung 1.01;EG;78.5;3;Familie Müller;mueller@email.de" style={{ minHeight: 200, fontFamily: 'monospace', fontSize: '0.875rem' }} />
           <p className="form-hint" style={{ marginTop: 8 }}>{batchText.split('\n').filter(l => l.trim()).length} Zeilen erkannt</p>
         </div>
         <div className="modal-footer"><button className="btn btn-outline" onClick={() => setShowBatchModal(false)}>Abbrechen</button><button className="btn btn-primary" onClick={saveBatch} disabled={!batchText.trim() || saving}>{saving ? <Loader2 size={18} className="animate-spin" /> : <Upload size={18} />} Importieren</button></div>
@@ -821,38 +874,27 @@ const ProjectDetail = ({ onLogout }) => {
       <Modal isOpen={showCustomModal} onClose={() => setShowCustomModal(false)} title="Individuelle Option hinzufügen">
         <div className="modal-body">
           {error && <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0.75rem', background: 'var(--error-light)', color: 'var(--error)', borderRadius: 8, marginBottom: '1rem', fontSize: '0.875rem' }}><AlertCircle size={16} />{error}</div>}
-          
           <div className="form-group">
             <label className="form-label">Kategorie *</label>
             <div style={{ display: 'flex', gap: '1rem', marginBottom: '0.75rem' }}>
               <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
                 <input type="radio" name="catType" checked={!customForm.use_new_category} onChange={() => setCustomForm({ ...customForm, use_new_category: false })} />
-                <span>Bestehende Kategorie</span>
+                <span>Bestehende</span>
               </label>
               <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
                 <input type="radio" name="catType" checked={customForm.use_new_category} onChange={() => setCustomForm({ ...customForm, use_new_category: true })} />
                 <span>Neue Kategorie</span>
               </label>
             </div>
-            
             {customForm.use_new_category ? (
-              <input 
-                type="text" 
-                className="form-input" 
-                value={customForm.new_category_name} 
-                onChange={e => setCustomForm({ ...customForm, new_category_name: e.target.value })}
-                placeholder="Name der neuen Kategorie"
-              />
+              <input type="text" className="form-input" value={customForm.new_category_name} onChange={e => setCustomForm({ ...customForm, new_category_name: e.target.value })} placeholder="Name der neuen Kategorie" />
             ) : (
               <select className="form-input" value={customForm.category_id} onChange={e => setCustomForm({ ...customForm, category_id: e.target.value })}>
                 <option value="">-- Kategorie wählen --</option>
-                {categories.sort((a, b) => a.sort_order - b.sort_order).map(cat => (
-                  <option key={cat.id} value={cat.id}>{cat.name}</option>
-                ))}
+                {categories.sort((a, b) => a.sort_order - b.sort_order).map(cat => (<option key={cat.id} value={cat.id}>{cat.name}</option>))}
               </select>
             )}
           </div>
-          
           <div className="form-group"><label className="form-label">Optionsname *</label><input type="text" className="form-input" value={customForm.name} onChange={e => setCustomForm({ ...customForm, name: e.target.value })} /></div>
           <div className="form-group"><label className="form-label">Beschreibung</label><textarea className="form-textarea" value={customForm.description} onChange={e => setCustomForm({ ...customForm, description: e.target.value })} /></div>
           <div className="form-group"><label className="form-label">Preis (€)</label><input type="number" className="form-input" value={customForm.price} onChange={e => setCustomForm({ ...customForm, price: e.target.value })} step="0.01" /></div>
@@ -877,7 +919,7 @@ const adminStyles = `
   .project-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 1.5rem; }
   .project-card { background: white; border-radius: 12px; padding: 1.5rem; box-shadow: var(--shadow); cursor: pointer; transition: all 0.2s; border: 2px solid transparent; }
   .project-card:hover { border-color: var(--gs-red); box-shadow: var(--shadow-lg); transform: translateY(-2px); }
-  .project-card-header { display: flex; justify-content: space-between; margin-bottom: 1rem; color: var(--gs-red); }
+  .project-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; color: var(--gs-red); min-height: 28px; }
   .project-card-actions { display: flex; gap: 4px; opacity: 0; transition: opacity 0.2s; }
   .project-card:hover .project-card-actions { opacity: 1; }
   .project-card-title { font-size: 1.25rem; font-weight: 600; margin-bottom: 0.25rem; }
@@ -895,6 +937,10 @@ const adminStyles = `
   .tab { display: flex; align-items: center; gap: 0.5rem; padding: 1rem 1.5rem; background: none; border: none; font-size: 0.9375rem; font-weight: 500; color: var(--gray-500); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -2px; }
   .tab:hover { color: var(--gray-700); }
   .tab.active { color: var(--gs-red); border-bottom-color: var(--gs-red); }
+  .modal-tabs { display: flex; border-bottom: 1px solid var(--gray-200); }
+  .modal-tab { flex: 1; padding: 1rem; background: none; border: none; font-size: 0.9375rem; font-weight: 500; color: var(--gray-500); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+  .modal-tab:hover { color: var(--gray-700); background: var(--gray-50); }
+  .modal-tab.active { color: var(--gs-red); border-bottom-color: var(--gs-red); }
   .section-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.5rem; }
   .section-header h3 { font-size: 1.25rem; margin-bottom: 0.25rem; }
   .section-header p { color: var(--gray-500); }

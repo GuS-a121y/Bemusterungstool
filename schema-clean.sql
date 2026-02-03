@@ -8,6 +8,9 @@ CREATE TABLE IF NOT EXISTS projects (
     name TEXT NOT NULL,
     description TEXT,
     address TEXT,
+    intro_text TEXT,
+    project_logo TEXT,
+    project_image TEXT,
     status TEXT DEFAULT 'aktiv' CHECK(status IN ('aktiv', 'abgeschlossen', 'archiviert')),
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP

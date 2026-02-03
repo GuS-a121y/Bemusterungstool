@@ -6,7 +6,6 @@ export async function onRequestGet(context) {
   const url = new URL(request.url)
   const apartmentId = url.searchParams.get('apartment_id')
   const code = url.searchParams.get('code')?.toUpperCase()
-  const download = url.searchParams.get('download') === '1'
 
   if (!apartmentId && !code) {
     return new Response('apartment_id oder code erforderlich', { status: 400 })
@@ -96,7 +95,7 @@ export async function onRequestGet(context) {
     })
 
     // PDF als HTML generieren
-    const html = generatePDFHtml(apartment, selectionDetails, totalPrice, download)
+    const html = generatePDFHtml(apartment, selectionDetails, totalPrice)
 
     return new Response(html, {
       headers: {
@@ -110,7 +109,7 @@ export async function onRequestGet(context) {
   }
 }
 
-function generatePDFHtml(apartment, selections, totalPrice, autoDownload) {
+function generatePDFHtml(apartment, selections, totalPrice) {
   const now = new Date()
   const date = now.toLocaleDateString('de-DE', { 
     day: '2-digit', month: '2-digit', year: 'numeric' 
@@ -150,16 +149,47 @@ function generatePDFHtml(apartment, selections, totalPrice, autoDownload) {
       padding: 20px;
       font-size: 14px;
     }
-    .header { 
-      display: flex; 
-      justify-content: space-between; 
+    .letterhead {
+      display: flex;
+      justify-content: space-between;
       align-items: flex-start;
-      border-bottom: 3px solid #E30613; 
-      padding-bottom: 15px; 
-      margin-bottom: 20px; 
+      margin-bottom: 25px;
+      padding-bottom: 20px;
+      border-bottom: 3px solid #E30613;
     }
-    .title { font-size: 22px; font-weight: bold; margin: 0; }
-    .subtitle { color: #6b7280; margin: 5px 0 0; font-size: 14px; }
+    .company-info {
+      font-size: 13px;
+      line-height: 1.6;
+    }
+    .company-name {
+      font-size: 18px;
+      font-weight: 700;
+      color: #E30613;
+      margin-bottom: 5px;
+    }
+    .company-address {
+      color: #4b5563;
+    }
+    .logo-container {
+      text-align: right;
+    }
+    .logo-container img {
+      height: 55px;
+    }
+    .document-title {
+      text-align: center;
+      margin-bottom: 25px;
+    }
+    .document-title h1 {
+      font-size: 22px;
+      font-weight: bold;
+      margin: 0 0 5px 0;
+    }
+    .document-title p {
+      color: #6b7280;
+      margin: 0;
+      font-size: 14px;
+    }
     .info-grid { 
       display: grid; 
       grid-template-columns: 1fr 1fr; 
@@ -193,22 +223,12 @@ function generatePDFHtml(apartment, selections, totalPrice, autoDownload) {
       font-size: 15px;
     }
     .validity-notice {
-      background: #f0fdf4;
-      border: 1px solid #86efac;
-      border-radius: 8px;
-      padding: 16px 20px;
-      margin-top: 25px;
-    }
-    .validity-notice h4 {
-      color: #166534;
-      margin: 0 0 8px 0;
-      font-size: 14px;
-    }
-    .validity-notice p {
-      color: #15803d;
-      margin: 0;
-      font-size: 13px;
-      line-height: 1.6;
+      margin-top: 30px;
+      padding-top: 15px;
+      border-top: 1px solid #e5e7eb;
+      font-size: 11px;
+      color: #374151;
+      line-height: 1.7;
     }
     .print-bar {
       background: #E30613; 
@@ -244,15 +264,22 @@ function generatePDFHtml(apartment, selections, totalPrice, autoDownload) {
     <button onclick="window.print()">Als PDF speichern / Drucken</button>
   </div>
 
-  <div class="header">
-    <div>
-      <h1 class="title">Bemusterungsprotokoll</h1>
-      <p class="subtitle">Verbindliche Ausstattungsauswahl</p>
+  <div class="letterhead">
+    <div class="company-info">
+      <div class="company-name">G&S Gruppe</div>
+      <div class="company-address">
+        Felix-Wankel-Straße 29<br>
+        53881 Euskirchen
+      </div>
     </div>
-    <div style="text-align: right;">
-      <div style="font-weight: 600; color: #E30613; font-size: 16px;">G&S Gruppe</div>
-      <div style="font-size: 13px; color: #6b7280;">Erstellt: ${date}, ${time} Uhr</div>
+    <div class="logo-container">
+      <img src="/logo.jpg" alt="G&S Gruppe Logo">
     </div>
+  </div>
+
+  <div class="document-title">
+    <h1>Bemusterungsprotokoll</h1>
+    <p>Verbindliche Ausstattungsauswahl vom ${date}</p>
   </div>
 
   <div class="info-grid">
@@ -274,12 +301,13 @@ function generatePDFHtml(apartment, selections, totalPrice, autoDownload) {
       ${apartment.customer_email ? `<div style="font-size: 13px; color: #6b7280; margin-top: 2px;">${apartment.customer_email}</div>` : ''}
     </div>
     <div class="info-box">
-      <div class="info-label">Referenz-Code</div>
+      <div class="info-label">Referenz</div>
       <div class="info-value" style="font-family: monospace; letter-spacing: 1px;">${apartment.access_code}</div>
+      <div style="font-size: 13px; color: #6b7280; margin-top: 2px;">Erstellt: ${date}, ${time} Uhr</div>
     </div>
   </div>
 
-  <h3 style="font-size: 16px; margin: 0 0 12px 0; color: #374151;">Gewählte Ausstattung</h3>
+  <h3 style="font-size: 15px; margin: 0 0 12px 0; color: #374151;">Gewählte Ausstattung</h3>
   
   <table>
     <thead>
@@ -301,13 +329,7 @@ function generatePDFHtml(apartment, selections, totalPrice, autoDownload) {
   </table>
 
   <div class="validity-notice">
-    <h4>✓ Rechtsgültiges Dokument</h4>
-    <p>
-      Dieses Bemusterungsprotokoll wurde am <strong>${date} um ${time} Uhr</strong> maschinell erstellt 
-      und elektronisch über das Bemusterungsportal der G&S Gruppe übermittelt. 
-      Das Dokument ist <strong>ohne Unterschrift rechtsgültig</strong>, da die Auswahl durch den Kunden 
-      aktiv und verbindlich im Online-Portal bestätigt wurde.
-    </p>
+    Dieses Bemusterungsprotokoll wurde am ${date} um ${time} Uhr maschinell erstellt und elektronisch über das Bemusterungsportal der G&S Gruppe übermittelt. Das Dokument ist ohne Unterschrift rechtsgültig, da die Auswahl durch den Kunden aktiv und verbindlich im Online-Portal bestätigt wurde.
   </div>
 
 </body>
