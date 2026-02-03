@@ -30,3 +30,6 @@ database_id = "DEINE_DATABASE_ID_HIER"  # Nach 'wrangler d1 create' hier eintrag
 [[r2_buckets]]
 binding = "IMAGES"
 bucket_name = "bemusterung-images"
+
+
+#test
