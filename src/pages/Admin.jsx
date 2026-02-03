@@ -349,7 +349,7 @@ const ProjectDetail = ({ onLogout }) => {
   const [categoryForm, setCategoryForm] = useState({ name: '', description: '', sort_order: 1 })
   const [optionForm, setOptionForm] = useState({ name: '', description: '', price: '0', is_default: 0, image_url: '' })
   const [apartmentForm, setApartmentForm] = useState({ name: '', floor: '', size_sqm: '', rooms: '', customer_name: '', customer_email: '' })
-  const [customForm, setCustomForm] = useState({ category_id: '', name: '', description: '', price: '0', image_url: '' })
+  const [customForm, setCustomForm] = useState({ category_id: '', new_category_name: '', use_new_category: false, name: '', description: '', price: '0', image_url: '' })
   const [batchText, setBatchText] = useState('')
 
   const loadData = useCallback(async () => {
@@ -526,26 +526,68 @@ const ProjectDetail = ({ onLogout }) => {
   }
 
   const openCustomModal = () => {
-    setCustomForm({ category_id: categories[0]?.id?.toString() || '', name: '', description: '', price: '0', image_url: '' })
+    setCustomForm({ 
+      category_id: categories[0]?.id?.toString() || '', 
+      new_category_name: '',
+      use_new_category: false,
+      name: '', 
+      description: '', 
+      price: '0', 
+      image_url: '' 
+    })
+    setError('')
     setShowCustomModal(true)
   }
 
   const saveCustomOption = async () => {
-    if (!customForm.name.trim() || !customForm.category_id) return
+    if (!customForm.name.trim()) return
+    
+    // Prüfen ob Kategorie gewählt oder neue eingegeben
+    const useNewCat = customForm.use_new_category
+    if (useNewCat && !customForm.new_category_name.trim()) {
+      setError('Bitte Kategoriename eingeben')
+      return
+    }
+    if (!useNewCat && !customForm.category_id) {
+      setError('Bitte Kategorie auswählen')
+      return
+    }
+
     setSaving(true)
+    setError('')
+    
     try {
+      let categoryId = parseInt(customForm.category_id)
+      
+      // Wenn neue Kategorie gewünscht, erst erstellen
+      if (useNewCat) {
+        const catResult = await api.post('/categories', {
+          project_id: parseInt(projectId),
+          name: customForm.new_category_name.trim(),
+          description: '',
+          sort_order: categories.length + 1
+        })
+        categoryId = catResult.id
+        // Kategorien neu laden
+        const catRes = await api.get(`/categories?project_id=${projectId}`)
+        setCategories(catRes.categories || [])
+      }
+      
+      // Individuelle Option erstellen
       const res = await api.post('/apartment-options', {
         action: 'add_custom',
         apartment_id: selectedApartment.id,
-        category_id: parseInt(customForm.category_id),
-        name: customForm.name,
+        category_id: categoryId,
+        name: customForm.name.trim(),
         description: customForm.description,
         price: parseFloat(customForm.price) || 0,
         image_url: customForm.image_url || null
       })
+      
       setCustomOptions(prev => [...prev, res.option])
       setShowCustomModal(false)
-    } catch (err) { alert(err.message) }
+      loadData() // Reload um neue Kategorie anzuzeigen
+    } catch (err) { setError(err.message) }
     setSaving(false)
   }
 
@@ -737,6 +779,7 @@ const ProjectDetail = ({ onLogout }) => {
           {categories.sort((a, b) => a.sort_order - b.sort_order).map(cat => {
             const catOptions = options.filter(o => o.category_id === cat.id)
             const catCustom = customOptions.filter(o => o.category_id === cat.id)
+            if (catOptions.length === 0 && catCustom.length === 0) return null
             return (
               <div key={cat.id} style={{ marginBottom: '1.5rem', background: 'var(--gray-50)', borderRadius: 8, padding: '1rem' }}>
                 <h4 style={{ margin: '0 0 1rem', fontSize: '0.9375rem' }}>{cat.name}</h4>
@@ -777,20 +820,45 @@ const ProjectDetail = ({ onLogout }) => {
 
       <Modal isOpen={showCustomModal} onClose={() => setShowCustomModal(false)} title="Individuelle Option hinzufügen">
         <div className="modal-body">
+          {error && <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0.75rem', background: 'var(--error-light)', color: 'var(--error)', borderRadius: 8, marginBottom: '1rem', fontSize: '0.875rem' }}><AlertCircle size={16} />{error}</div>}
+          
           <div className="form-group">
             <label className="form-label">Kategorie *</label>
-            <select className="form-input" value={customForm.category_id} onChange={e => setCustomForm({ ...customForm, category_id: e.target.value })}>
-              {categories.sort((a, b) => a.sort_order - b.sort_order).map(cat => (
-                <option key={cat.id} value={cat.id}>{cat.name}</option>
-              ))}
-            </select>
+            <div style={{ display: 'flex', gap: '1rem', marginBottom: '0.75rem' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                <input type="radio" name="catType" checked={!customForm.use_new_category} onChange={() => setCustomForm({ ...customForm, use_new_category: false })} />
+                <span>Bestehende Kategorie</span>
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                <input type="radio" name="catType" checked={customForm.use_new_category} onChange={() => setCustomForm({ ...customForm, use_new_category: true })} />
+                <span>Neue Kategorie</span>
+              </label>
+            </div>
+            
+            {customForm.use_new_category ? (
+              <input 
+                type="text" 
+                className="form-input" 
+                value={customForm.new_category_name} 
+                onChange={e => setCustomForm({ ...customForm, new_category_name: e.target.value })}
+                placeholder="Name der neuen Kategorie"
+              />
+            ) : (
+              <select className="form-input" value={customForm.category_id} onChange={e => setCustomForm({ ...customForm, category_id: e.target.value })}>
+                <option value="">-- Kategorie wählen --</option>
+                {categories.sort((a, b) => a.sort_order - b.sort_order).map(cat => (
+                  <option key={cat.id} value={cat.id}>{cat.name}</option>
+                ))}
+              </select>
+            )}
           </div>
-          <div className="form-group"><label className="form-label">Name *</label><input type="text" className="form-input" value={customForm.name} onChange={e => setCustomForm({ ...customForm, name: e.target.value })} autoFocus /></div>
+          
+          <div className="form-group"><label className="form-label">Optionsname *</label><input type="text" className="form-input" value={customForm.name} onChange={e => setCustomForm({ ...customForm, name: e.target.value })} /></div>
           <div className="form-group"><label className="form-label">Beschreibung</label><textarea className="form-textarea" value={customForm.description} onChange={e => setCustomForm({ ...customForm, description: e.target.value })} /></div>
           <div className="form-group"><label className="form-label">Preis (€)</label><input type="number" className="form-input" value={customForm.price} onChange={e => setCustomForm({ ...customForm, price: e.target.value })} step="0.01" /></div>
           <div className="form-group"><label className="form-label">Bild (optional)</label><ImageUpload value={customForm.image_url} onChange={url => setCustomForm({ ...customForm, image_url: url })} /></div>
         </div>
-        <div className="modal-footer"><button className="btn btn-outline" onClick={() => setShowCustomModal(false)}>Abbrechen</button><button className="btn btn-primary" onClick={saveCustomOption} disabled={!customForm.name.trim() || !customForm.category_id || saving}>{saving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />} Hinzufügen</button></div>
+        <div className="modal-footer"><button className="btn btn-outline" onClick={() => setShowCustomModal(false)}>Abbrechen</button><button className="btn btn-primary" onClick={saveCustomOption} disabled={!customForm.name.trim() || saving}>{saving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />} Hinzufügen</button></div>
       </Modal>
 
       <style>{adminStyles}</style>

@@ -95,10 +95,8 @@ function Customer() {
       
       if (res.ok) {
         setIsCompleted(true)
-        // PDF automatisch öffnen
-        setTimeout(() => {
-          window.open(`/api/pdf?code=${code.toUpperCase()}`, '_blank')
-        }, 500)
+        // PDF in neuem Tab öffnen damit der Kunde es speichern kann
+        window.open(`/api/pdf?code=${code.toUpperCase()}`, '_blank')
       } else {
         const data = await res.json()
         alert(data.error || 'Fehler beim Speichern')
@@ -164,9 +162,11 @@ function Customer() {
           <div style={{ width: 80, height: 80, background: 'var(--success-light)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.5rem' }}>
             <CheckCircle2 size={40} color="var(--success)" />
           </div>
-          <h2 style={{ marginBottom: '0.5rem' }}>Bemusterung abgeschlossen</h2>
-          <p style={{ color: 'var(--gray-500)', maxWidth: 400, margin: '0 auto 2rem' }}>
-            Vielen Dank! Ihre Auswahl wurde erfolgreich übermittelt.
+          <h2 style={{ marginBottom: '0.5rem' }}>Bemusterung erfolgreich abgeschlossen!</h2>
+          <p style={{ color: 'var(--gray-500)', maxWidth: 450, margin: '0 auto 2rem' }}>
+            Vielen Dank! Ihre Auswahl wurde verbindlich übermittelt. 
+            Ein Protokoll wurde automatisch in einem neuen Tab geöffnet - 
+            bitte speichern Sie dieses als PDF für Ihre Unterlagen.
           </p>
           
           {categories.length > 0 && (

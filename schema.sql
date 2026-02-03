@@ -55,6 +55,7 @@ CREATE TABLE IF NOT EXISTS options (
 );
 
 -- Kundenauswahl (eine Auswahl pro Kategorie pro Wohnung)
+-- option_id kann negativ sein für individuelle Optionen (dann ist es -apartment_custom_options.id)
 CREATE TABLE IF NOT EXISTS selections (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     apartment_id INTEGER NOT NULL,
@@ -63,7 +64,6 @@ CREATE TABLE IF NOT EXISTS selections (
     selected_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (apartment_id) REFERENCES apartments(id) ON DELETE CASCADE,
     FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE,
-    FOREIGN KEY (option_id) REFERENCES options(id) ON DELETE CASCADE,
     UNIQUE(apartment_id, category_id)
 );
 
