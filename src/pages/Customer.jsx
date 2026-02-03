@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ChevronLeft, ChevronRight, Check, Home, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Check, Home, AlertCircle, CheckCircle2, Loader2, FileText } from 'lucide-react'
 
 function Customer() {
   const { code } = useParams()
@@ -95,6 +95,10 @@ function Customer() {
       
       if (res.ok) {
         setIsCompleted(true)
+        // PDF automatisch öffnen
+        setTimeout(() => {
+          window.open(`/api/pdf?code=${code.toUpperCase()}`, '_blank')
+        }, 500)
       } else {
         const data = await res.json()
         alert(data.error || 'Fehler beim Speichern')
@@ -187,7 +191,10 @@ function Customer() {
             </div>
           )}
 
-          <button className="btn btn-outline" onClick={() => navigate('/')}><Home size={18} /> Zur Startseite</button>
+          <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
+            <button className="btn btn-primary" onClick={() => window.open(`/api/pdf?code=${code.toUpperCase()}`, '_blank')}><FileText size={18} /> PDF herunterladen</button>
+            <button className="btn btn-outline" onClick={() => navigate('/')}><Home size={18} /> Zur Startseite</button>
+          </div>
         </div>
         <style>{wizardStyles}</style>
       </div>

@@ -88,7 +88,19 @@ export async function onRequestPost(context) {
         image_url || null
       ).run()
 
-      return Response.json({ success: true, id: result.meta.last_row_id })
+      return Response.json({ 
+        success: true, 
+        id: result.meta.last_row_id,
+        option: {
+          id: result.meta.last_row_id,
+          apartment_id: parseInt(apartment_id),
+          category_id: parseInt(category_id),
+          name: name.trim(),
+          description: description || '',
+          price: parseFloat(price) || 0,
+          image_url: image_url || null
+        }
+      })
     }
     
     if (action === 'delete_custom') {

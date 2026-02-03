@@ -151,10 +151,13 @@ export async function onRequestPost(context) {
 
     // Auswahl speichern
     for (const [categoryId, optionId] of Object.entries(selections)) {
-      // Prüfen ob es eine individuelle Option ist (custom_123 Format)
+      // Prüfen ob es eine individuelle Option ist (custom_123 Format oder String)
       let finalOptionId = optionId
       if (typeof optionId === 'string' && optionId.startsWith('custom_')) {
-        finalOptionId = parseInt(optionId.replace('custom_', '')) * -1 // Negativ markieren
+        // Individuelle Option: ID extrahieren und negativ speichern
+        finalOptionId = -Math.abs(parseInt(optionId.replace('custom_', '')))
+      } else {
+        finalOptionId = parseInt(optionId)
       }
       
       await env.DB.prepare(`

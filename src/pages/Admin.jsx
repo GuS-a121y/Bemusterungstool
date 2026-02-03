@@ -1,10 +1,9 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { Routes, Route, useNavigate, useParams } from 'react-router-dom'
 import {
-  Building2, Home, FolderOpen,
-  Plus, Edit2, Trash2, Eye, Copy, Check, X,
-  ChevronRight, Image, ArrowLeft, Save, AlertCircle,
-  Users, FileSpreadsheet, Lock, LogOut, ImagePlus, Settings2, EyeOff, Loader2, RefreshCw
+  Building2, Home, FolderOpen, Plus, Edit2, Trash2, Eye, Copy, Check, X,
+  ChevronRight, Image, ArrowLeft, Save, AlertCircle, Users, FileSpreadsheet,
+  Lock, LogOut, ImagePlus, Settings2, EyeOff, Loader2, RefreshCw, FileText, Upload
 } from 'lucide-react'
 
 // ============================================
@@ -21,7 +20,10 @@ const ADMIN_CREDENTIALS = {
 const api = {
   async get(endpoint) {
     const res = await fetch(`/api${endpoint}`)
-    if (!res.ok) throw new Error('API Fehler')
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}))
+      throw new Error(err.error || 'API Fehler')
+    }
     return res.json()
   },
   async post(endpoint, data) {
@@ -30,8 +32,9 @@ const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
     })
-    if (!res.ok) throw new Error('API Fehler')
-    return res.json()
+    const json = await res.json()
+    if (!res.ok) throw new Error(json.error || 'API Fehler')
+    return json
   },
   async put(endpoint, data) {
     const res = await fetch(`/api${endpoint}`, {
@@ -39,8 +42,9 @@ const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
     })
-    if (!res.ok) throw new Error('API Fehler')
-    return res.json()
+    const json = await res.json()
+    if (!res.ok) throw new Error(json.error || 'API Fehler')
+    return json
   },
   async delete(endpoint) {
     const res = await fetch(`/api${endpoint}`, { method: 'DELETE' })
@@ -52,13 +56,6 @@ const api = {
 // ============================================
 // HILFSFUNKTIONEN
 // ============================================
-const generateCode = (prefix = 'GS') => {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
-  let code = prefix.substring(0, 3).toUpperCase() + '-'
-  for (let i = 0; i < 6; i++) code += chars.charAt(Math.floor(Math.random() * chars.length))
-  return code
-}
-
 const formatPrice = (price) => {
   if (price === 0) return <span style={{ color: 'var(--gray-600)' }}>Inklusive</span>
   if (price > 0) return <span style={{ fontWeight: 600 }}>+{price.toLocaleString('de-DE')} €</span>
@@ -113,7 +110,6 @@ const ImageUpload = ({ value, onChange }) => {
     const reader = new FileReader()
     reader.onload = async (e) => {
       setPreview(e.target.result)
-      // Upload zur API
       try {
         const formData = new FormData()
         formData.append('file', file)
@@ -122,10 +118,10 @@ const ImageUpload = ({ value, onChange }) => {
           const data = await res.json()
           onChange(data.url)
         } else {
-          onChange(e.target.result) // Fallback: Base64
+          onChange(e.target.result)
         }
       } catch {
-        onChange(e.target.result) // Fallback: Base64
+        onChange(e.target.result)
       }
       setUploading(false)
     }
@@ -137,7 +133,7 @@ const ImageUpload = ({ value, onChange }) => {
       <input ref={fileRef} type="file" accept="image/*" onChange={e => handleFile(e.target.files[0])} style={{ display: 'none' }} />
       {preview ? (
         <div style={{ position: 'relative', borderRadius: 8, overflow: 'hidden' }}>
-          <img src={preview} alt="" style={{ width: '100%', height: 150, objectFit: 'cover' }} />
+          <img src={preview} alt="" style={{ width: '100%', height: 120, objectFit: 'cover' }} />
           <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: 8, background: 'linear-gradient(transparent, rgba(0,0,0,0.7))', display: 'flex', justifyContent: 'center', gap: 8 }}>
             <button type="button" className="btn btn-sm btn-outline" style={{ background: 'white' }} onClick={() => fileRef.current?.click()}>Ändern</button>
             <button type="button" className="btn btn-sm btn-ghost" style={{ background: 'white', color: 'var(--error)' }} onClick={() => { setPreview(''); onChange('') }}><Trash2 size={16} /></button>
@@ -145,15 +141,14 @@ const ImageUpload = ({ value, onChange }) => {
         </div>
       ) : (
         <div
-          className={`image-dropzone ${isDragging ? 'dragging' : ''}`}
           onDrop={e => { e.preventDefault(); setIsDragging(false); handleFile(e.dataTransfer.files[0]) }}
           onDragOver={e => { e.preventDefault(); setIsDragging(true) }}
           onDragLeave={() => setIsDragging(false)}
           onClick={() => fileRef.current?.click()}
-          style={{ border: '2px dashed var(--gray-300)', borderRadius: 8, padding: '2rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, cursor: 'pointer', color: 'var(--gray-500)', background: isDragging ? 'rgba(227,6,19,0.05)' : 'var(--gray-50)' }}
+          style={{ border: '2px dashed var(--gray-300)', borderRadius: 8, padding: '1.5rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, cursor: 'pointer', color: 'var(--gray-500)', background: isDragging ? 'rgba(227,6,19,0.05)' : 'var(--gray-50)' }}
         >
-          {uploading ? <Loader2 className="animate-spin" size={24} /> : <ImagePlus size={32} />}
-          <span>{uploading ? 'Wird hochgeladen...' : 'Bild hierher ziehen oder klicken'}</span>
+          {uploading ? <Loader2 className="animate-spin" size={24} /> : <ImagePlus size={28} />}
+          <span style={{ fontSize: '0.875rem' }}>{uploading ? 'Hochladen...' : 'Bild hinzufügen'}</span>
         </div>
       )}
     </div>
@@ -204,7 +199,6 @@ const ProjectList = ({ onLogout }) => {
   const navigate = useNavigate()
   const [projects, setProjects] = useState([])
   const [apartments, setApartments] = useState([])
-  const [categories, setCategories] = useState([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [editProject, setEditProject] = useState(null)
@@ -214,15 +208,10 @@ const ProjectList = ({ onLogout }) => {
   const loadData = useCallback(async () => {
     setLoading(true)
     try {
-      const [projRes, aptRes] = await Promise.all([
-        api.get('/projects'),
-        api.get('/apartments')
-      ])
+      const [projRes, aptRes] = await Promise.all([api.get('/projects'), api.get('/apartments')])
       setProjects(projRes.projects || [])
       setApartments(aptRes.apartments || [])
-    } catch (err) {
-      console.error('Fehler:', err)
-    }
+    } catch (err) { console.error(err) }
     setLoading(false)
   }, [])
 
@@ -238,28 +227,18 @@ const ProjectList = ({ onLogout }) => {
     if (!formData.name.trim()) return
     setSaving(true)
     try {
-      if (editProject) {
-        await api.put('/projects', { id: editProject.id, ...formData })
-      } else {
-        await api.post('/projects', formData)
-      }
+      if (editProject) await api.put('/projects', { id: editProject.id, ...formData })
+      else await api.post('/projects', formData)
       setShowModal(false)
       loadData()
-    } catch (err) {
-      alert('Fehler beim Speichern')
-    }
+    } catch (err) { alert(err.message) }
     setSaving(false)
   }
 
   const handleDelete = async (e, id) => {
     e.stopPropagation()
     if (!confirm('Projekt wirklich löschen?')) return
-    try {
-      await api.delete(`/projects?id=${id}`)
-      loadData()
-    } catch (err) {
-      alert('Fehler beim Löschen')
-    }
+    try { await api.delete(`/projects?id=${id}`); loadData() } catch { alert('Fehler') }
   }
 
   if (loading) return <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Loader2 className="animate-spin" size={32} /></div>
@@ -355,6 +334,7 @@ const ProjectDetail = ({ onLogout }) => {
   const [showCategoryModal, setShowCategoryModal] = useState(false)
   const [showOptionModal, setShowOptionModal] = useState(false)
   const [showApartmentModal, setShowApartmentModal] = useState(false)
+  const [showBatchModal, setShowBatchModal] = useState(false)
   const [showOptionsConfig, setShowOptionsConfig] = useState(false)
   const [showCustomModal, setShowCustomModal] = useState(false)
   const [editItem, setEditItem] = useState(null)
@@ -363,12 +343,14 @@ const ProjectDetail = ({ onLogout }) => {
   const [hiddenOptions, setHiddenOptions] = useState([])
   const [customOptions, setCustomOptions] = useState([])
   const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
 
   // Forms
   const [categoryForm, setCategoryForm] = useState({ name: '', description: '', sort_order: 1 })
   const [optionForm, setOptionForm] = useState({ name: '', description: '', price: '0', is_default: 0, image_url: '' })
-  const [apartmentForm, setApartmentForm] = useState({ name: '', floor: '', size_sqm: '', rooms: '', customer_name: '', customer_email: '', access_code: '' })
-  const [customForm, setCustomForm] = useState({ name: '', description: '', price: '0' })
+  const [apartmentForm, setApartmentForm] = useState({ name: '', floor: '', size_sqm: '', rooms: '', customer_name: '', customer_email: '' })
+  const [customForm, setCustomForm] = useState({ category_id: '', name: '', description: '', price: '0', image_url: '' })
+  const [batchText, setBatchText] = useState('')
 
   const loadData = useCallback(async () => {
     setLoading(true)
@@ -379,14 +361,11 @@ const ProjectDetail = ({ onLogout }) => {
         api.get(`/options?project_id=${projectId}`),
         api.get(`/apartments?project_id=${projectId}`)
       ])
-      const proj = (projRes.projects || []).find(p => p.id === parseInt(projectId))
-      setProject(proj || null)
+      setProject((projRes.projects || []).find(p => p.id === parseInt(projectId)) || null)
       setCategories(catRes.categories || [])
       setOptions(optRes.options || [])
       setApartments(aptRes.apartments || [])
-    } catch (err) {
-      console.error('Fehler:', err)
-    }
+    } catch (err) { console.error(err) }
     setLoading(false)
   }, [projectId])
 
@@ -403,14 +382,11 @@ const ProjectDetail = ({ onLogout }) => {
     if (!categoryForm.name.trim()) return
     setSaving(true)
     try {
-      if (editItem) {
-        await api.put('/categories', { id: editItem.id, ...categoryForm, sort_order: parseInt(categoryForm.sort_order) })
-      } else {
-        await api.post('/categories', { project_id: parseInt(projectId), ...categoryForm, sort_order: parseInt(categoryForm.sort_order) })
-      }
+      if (editItem) await api.put('/categories', { id: editItem.id, ...categoryForm, sort_order: parseInt(categoryForm.sort_order) })
+      else await api.post('/categories', { project_id: parseInt(projectId), ...categoryForm, sort_order: parseInt(categoryForm.sort_order) })
       setShowCategoryModal(false)
       loadData()
-    } catch { alert('Fehler') }
+    } catch (err) { alert(err.message) }
     setSaving(false)
   }
 
@@ -432,14 +408,11 @@ const ProjectDetail = ({ onLogout }) => {
     setSaving(true)
     try {
       const data = { ...optionForm, price: parseFloat(optionForm.price) || 0, is_default: optionForm.is_default ? 1 : 0 }
-      if (editItem) {
-        await api.put('/options', { id: editItem.id, category_id: selectedCategory, ...data })
-      } else {
-        await api.post('/options', { category_id: selectedCategory, ...data })
-      }
+      if (editItem) await api.put('/options', { id: editItem.id, category_id: selectedCategory, ...data })
+      else await api.post('/options', { category_id: selectedCategory, ...data })
       setShowOptionModal(false)
       loadData()
-    } catch { alert('Fehler') }
+    } catch (err) { alert(err.message) }
     setSaving(false)
   }
 
@@ -448,44 +421,83 @@ const ProjectDetail = ({ onLogout }) => {
     try { await api.delete(`/options?id=${id}`); loadData() } catch { alert('Fehler') }
   }
 
-  // Wohnung
+  // Wohnung (Einzeln)
   const openApartmentModal = (apt = null) => {
     setEditItem(apt)
+    setError('')
     setApartmentForm(apt ? {
       name: apt.name, floor: apt.floor || '', size_sqm: apt.size_sqm?.toString() || '', rooms: apt.rooms?.toString() || '',
-      customer_name: apt.customer_name || '', customer_email: apt.customer_email || '', access_code: apt.access_code
-    } : {
-      name: '', floor: '', size_sqm: '', rooms: '', customer_name: '', customer_email: '',
-      access_code: generateCode(project?.name || 'GS')
-    })
+      customer_name: apt.customer_name || '', customer_email: apt.customer_email || ''
+    } : { name: '', floor: '', size_sqm: '', rooms: '', customer_name: '', customer_email: '' })
     setShowApartmentModal(true)
   }
 
   const saveApartment = async () => {
-    if (!apartmentForm.name.trim() || !apartmentForm.customer_name.trim()) return
+    if (!apartmentForm.name.trim()) return
     setSaving(true)
+    setError('')
     try {
       const data = {
         ...apartmentForm,
         project_id: parseInt(projectId),
         size_sqm: apartmentForm.size_sqm ? parseFloat(apartmentForm.size_sqm) : null,
-        rooms: apartmentForm.rooms ? parseInt(apartmentForm.rooms) : null,
-        access_code: apartmentForm.access_code.toUpperCase()
+        rooms: apartmentForm.rooms ? parseInt(apartmentForm.rooms) : null
       }
-      if (editItem) {
-        await api.put('/apartments', { id: editItem.id, ...data })
-      } else {
-        await api.post('/apartments', data)
-      }
+      if (editItem) await api.put('/apartments', { id: editItem.id, ...data })
+      else await api.post('/apartments', data)
       setShowApartmentModal(false)
       loadData()
-    } catch { alert('Fehler') }
+    } catch (err) { setError(err.message) }
     setSaving(false)
   }
 
   const deleteApartment = async (id) => {
     if (!confirm('Wohnung löschen?')) return
     try { await api.delete(`/apartments?id=${id}`); loadData() } catch { alert('Fehler') }
+  }
+
+  // Batch-Erstellung
+  const openBatchModal = () => {
+    setBatchText('')
+    setError('')
+    setShowBatchModal(true)
+  }
+
+  const saveBatch = async () => {
+    const lines = batchText.split('\n').filter(l => l.trim())
+    if (lines.length === 0) return
+
+    const aptList = lines.map(line => {
+      const parts = line.split(';').map(p => p.trim())
+      return {
+        name: parts[0] || '',
+        floor: parts[1] || '',
+        size_sqm: parts[2] || '',
+        rooms: parts[3] || '',
+        customer_name: parts[4] || '',
+        customer_email: parts[5] || ''
+      }
+    }).filter(a => a.name)
+
+    if (aptList.length === 0) { setError('Keine gültigen Wohnungen gefunden'); return }
+
+    setSaving(true)
+    setError('')
+    try {
+      const result = await api.post('/apartments', {
+        batch: true,
+        project_id: parseInt(projectId),
+        apartments: aptList
+      })
+      
+      if (result.errors?.length > 0) {
+        setError(`${result.created.length} erstellt, ${result.errors.length} Fehler: ${result.errors.map(e => e.name + ' (' + e.error + ')').join(', ')}`)
+      } else {
+        setShowBatchModal(false)
+      }
+      loadData()
+    } catch (err) { setError(err.message) }
+    setSaving(false)
   }
 
   const copyCode = (code) => { navigator.clipboard.writeText(code); setCopiedCode(code); setTimeout(() => setCopiedCode(null), 2000) }
@@ -513,27 +525,27 @@ const ProjectDetail = ({ onLogout }) => {
     } catch { alert('Fehler') }
   }
 
-  const openCustomModal = (catId) => {
-    setSelectedCategory(catId)
-    setCustomForm({ name: '', description: '', price: '0' })
+  const openCustomModal = () => {
+    setCustomForm({ category_id: categories[0]?.id?.toString() || '', name: '', description: '', price: '0', image_url: '' })
     setShowCustomModal(true)
   }
 
   const saveCustomOption = async () => {
-    if (!customForm.name.trim()) return
+    if (!customForm.name.trim() || !customForm.category_id) return
     setSaving(true)
     try {
       const res = await api.post('/apartment-options', {
         action: 'add_custom',
         apartment_id: selectedApartment.id,
-        category_id: selectedCategory,
+        category_id: parseInt(customForm.category_id),
         name: customForm.name,
         description: customForm.description,
-        price: parseFloat(customForm.price) || 0
+        price: parseFloat(customForm.price) || 0,
+        image_url: customForm.image_url || null
       })
-      setCustomOptions(prev => [...prev, { id: res.id, category_id: selectedCategory, name: customForm.name, description: customForm.description, price: parseFloat(customForm.price) || 0 }])
+      setCustomOptions(prev => [...prev, res.option])
       setShowCustomModal(false)
-    } catch { alert('Fehler') }
+    } catch (err) { alert(err.message) }
     setSaving(false)
   }
 
@@ -621,6 +633,7 @@ const ProjectDetail = ({ onLogout }) => {
               <div><h3>Wohnungen & Kunden</h3><p>Wohnungen anlegen und Optionen konfigurieren.</p></div>
               <div style={{ display: 'flex', gap: 12 }}>
                 <button className="btn btn-outline" onClick={() => window.open(`/api/export?project_id=${projectId}`)}><FileSpreadsheet size={18} /> Export</button>
+                <button className="btn btn-outline" onClick={openBatchModal}><Upload size={18} /> Sammelimport</button>
                 <button className="btn btn-primary" onClick={() => openApartmentModal()}><Plus size={18} /> Neue Wohnung</button>
               </div>
             </div>
@@ -629,17 +642,18 @@ const ProjectDetail = ({ onLogout }) => {
             ) : (
               <div className="table-container">
                 <table>
-                  <thead><tr><th>Wohnung</th><th>Kunde</th><th>Zugangscode</th><th>Status</th><th style={{ width: 180 }}>Aktionen</th></tr></thead>
+                  <thead><tr><th>Wohnung</th><th>Kunde</th><th>Zugangscode</th><th>Status</th><th style={{ width: 200 }}>Aktionen</th></tr></thead>
                   <tbody>
                     {apartments.map(apt => (
                       <tr key={apt.id}>
                         <td><div style={{ fontWeight: 600 }}>{apt.name}</div><div style={{ fontSize: '0.8125rem', color: 'var(--gray-500)' }}>{[apt.floor, apt.size_sqm && `${apt.size_sqm} m²`, apt.rooms && `${apt.rooms} Zi.`].filter(Boolean).join(' · ')}</div></td>
-                        <td><div style={{ fontWeight: 500 }}>{apt.customer_name}</div>{apt.customer_email && <div style={{ fontSize: '0.8125rem', color: 'var(--gray-500)' }}>{apt.customer_email}</div>}</td>
+                        <td><div style={{ fontWeight: 500 }}>{apt.customer_name || '-'}</div>{apt.customer_email && <div style={{ fontSize: '0.8125rem', color: 'var(--gray-500)' }}>{apt.customer_email}</div>}</td>
                         <td><div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><code className="access-code">{apt.access_code}</code><button className="btn btn-ghost btn-icon btn-sm" onClick={() => copyCode(apt.access_code)}>{copiedCode === apt.access_code ? <Check size={14} color="var(--success)" /> : <Copy size={14} />}</button></div></td>
                         <td><StatusBadge status={apt.status} /></td>
                         <td><div style={{ display: 'flex', gap: 4 }}>
-                          <button className="btn btn-ghost btn-icon btn-sm" onClick={() => openOptionsConfig(apt)} title="Optionen anpassen"><Settings2 size={16} /></button>
+                          <button className="btn btn-ghost btn-icon btn-sm" onClick={() => openOptionsConfig(apt)} title="Optionen"><Settings2 size={16} /></button>
                           <button className="btn btn-ghost btn-icon btn-sm" onClick={() => window.open(`/kunde/${apt.access_code}`, '_blank')} title="Vorschau"><Eye size={16} /></button>
+                          {apt.status === 'abgeschlossen' && <button className="btn btn-ghost btn-icon btn-sm" onClick={() => window.open(`/api/pdf?apartment_id=${apt.id}`, '_blank')} title="PDF"><FileText size={16} /></button>}
                           <button className="btn btn-ghost btn-icon btn-sm" onClick={() => openApartmentModal(apt)} title="Bearbeiten"><Edit2 size={16} /></button>
                           <button className="btn btn-ghost btn-icon btn-sm" onClick={() => deleteApartment(apt.id)} style={{ color: 'var(--error)' }} title="Löschen"><Trash2 size={16} /></button>
                         </div></td>
@@ -653,7 +667,7 @@ const ProjectDetail = ({ onLogout }) => {
         )}
       </div>
 
-      {/* Modals */}
+      {/* MODALS */}
       <Modal isOpen={showCategoryModal} onClose={() => setShowCategoryModal(false)} title={editItem ? 'Kategorie bearbeiten' : 'Neue Kategorie'}>
         <div className="modal-body">
           <div className="form-group"><label className="form-label">Name *</label><input type="text" className="form-input" value={categoryForm.name} onChange={e => setCategoryForm({ ...categoryForm, name: e.target.value })} autoFocus /></div>
@@ -680,50 +694,58 @@ const ProjectDetail = ({ onLogout }) => {
         <div className="modal-footer"><button className="btn btn-outline" onClick={() => setShowOptionModal(false)}>Abbrechen</button><button className="btn btn-primary" onClick={saveOption} disabled={!optionForm.name.trim() || saving}>{saving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />} Speichern</button></div>
       </Modal>
 
-      <Modal isOpen={showApartmentModal} onClose={() => setShowApartmentModal(false)} title={editItem ? 'Wohnung bearbeiten' : 'Neue Wohnung'} size="modal-lg">
+      <Modal isOpen={showApartmentModal} onClose={() => setShowApartmentModal(false)} title={editItem ? 'Wohnung bearbeiten' : 'Neue Wohnung'}>
         <div className="modal-body">
-          <h4 style={{ marginBottom: '1rem', color: 'var(--gray-500)', fontSize: '0.75rem', textTransform: 'uppercase' }}>Wohnungsdaten</h4>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-            <div className="form-group"><label className="form-label">Bezeichnung *</label><input type="text" className="form-input" value={apartmentForm.name} onChange={e => setApartmentForm({ ...apartmentForm, name: e.target.value })} /></div>
+          {error && <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0.75rem', background: 'var(--error-light)', color: 'var(--error)', borderRadius: 8, marginBottom: '1rem', fontSize: '0.875rem' }}><AlertCircle size={16} />{error}</div>}
+          <div className="form-group"><label className="form-label">Bezeichnung *</label><input type="text" className="form-input" value={apartmentForm.name} onChange={e => setApartmentForm({ ...apartmentForm, name: e.target.value })} placeholder="z.B. Wohnung 1.01" autoFocus /></div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem' }}>
             <div className="form-group"><label className="form-label">Etage</label><input type="text" className="form-input" value={apartmentForm.floor} onChange={e => setApartmentForm({ ...apartmentForm, floor: e.target.value })} /></div>
             <div className="form-group"><label className="form-label">Größe (m²)</label><input type="number" className="form-input" value={apartmentForm.size_sqm} onChange={e => setApartmentForm({ ...apartmentForm, size_sqm: e.target.value })} /></div>
             <div className="form-group"><label className="form-label">Zimmer</label><input type="number" className="form-input" value={apartmentForm.rooms} onChange={e => setApartmentForm({ ...apartmentForm, rooms: e.target.value })} /></div>
           </div>
           <div className="gs-accent-line" style={{ margin: '1.5rem 0' }} />
-          <h4 style={{ marginBottom: '1rem', color: 'var(--gray-500)', fontSize: '0.75rem', textTransform: 'uppercase' }}>Kundendaten</h4>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-            <div className="form-group"><label className="form-label">Kundenname *</label><input type="text" className="form-input" value={apartmentForm.customer_name} onChange={e => setApartmentForm({ ...apartmentForm, customer_name: e.target.value })} /></div>
-            <div className="form-group"><label className="form-label">E-Mail</label><input type="email" className="form-input" value={apartmentForm.customer_email} onChange={e => setApartmentForm({ ...apartmentForm, customer_email: e.target.value })} /></div>
-          </div>
-          <div className="form-group" style={{ marginTop: '1rem' }}>
-            <label className="form-label">Zugangscode</label>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <input type="text" className="form-input" value={apartmentForm.access_code} onChange={e => setApartmentForm({ ...apartmentForm, access_code: e.target.value.toUpperCase() })} style={{ fontFamily: 'monospace', flex: 1 }} />
-              <button type="button" className="btn btn-outline" onClick={() => setApartmentForm({ ...apartmentForm, access_code: generateCode(project?.name || 'GS') })}>Neu generieren</button>
-            </div>
-          </div>
+          <div className="form-group"><label className="form-label">Kundenname</label><input type="text" className="form-input" value={apartmentForm.customer_name} onChange={e => setApartmentForm({ ...apartmentForm, customer_name: e.target.value })} /></div>
+          <div className="form-group"><label className="form-label">E-Mail</label><input type="email" className="form-input" value={apartmentForm.customer_email} onChange={e => setApartmentForm({ ...apartmentForm, customer_email: e.target.value })} /></div>
+          {editItem && <div className="form-group"><label className="form-label">Zugangscode</label><input type="text" className="form-input" value={editItem.access_code} disabled style={{ background: 'var(--gray-100)', fontFamily: 'monospace' }} /><p className="form-hint">Der Zugangscode kann nicht geändert werden.</p></div>}
         </div>
-        <div className="modal-footer"><button className="btn btn-outline" onClick={() => setShowApartmentModal(false)}>Abbrechen</button><button className="btn btn-primary" onClick={saveApartment} disabled={!apartmentForm.name.trim() || !apartmentForm.customer_name.trim() || saving}>{saving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />} Speichern</button></div>
+        <div className="modal-footer"><button className="btn btn-outline" onClick={() => setShowApartmentModal(false)}>Abbrechen</button><button className="btn btn-primary" onClick={saveApartment} disabled={!apartmentForm.name.trim() || saving}>{saving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />} Speichern</button></div>
+      </Modal>
+
+      <Modal isOpen={showBatchModal} onClose={() => setShowBatchModal(false)} title="Wohnungen Sammelimport" size="modal-lg">
+        <div className="modal-body">
+          <p style={{ color: 'var(--gray-500)', marginBottom: '1rem' }}>Geben Sie eine Wohnung pro Zeile ein. Felder mit Semikolon trennen:</p>
+          <p style={{ fontFamily: 'monospace', fontSize: '0.8125rem', background: 'var(--gray-100)', padding: '0.75rem', borderRadius: 6, marginBottom: '1rem' }}>Name;Etage;m²;Zimmer;Kundenname;Email</p>
+          {error && <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0.75rem', background: 'var(--error-light)', color: 'var(--error)', borderRadius: 8, marginBottom: '1rem', fontSize: '0.875rem' }}><AlertCircle size={16} />{error}</div>}
+          <textarea 
+            className="form-textarea" 
+            value={batchText} 
+            onChange={e => setBatchText(e.target.value)} 
+            placeholder="Wohnung 1.01;EG;78.5;3;Familie Müller;mueller@email.de&#10;Wohnung 1.02;EG;92;4;Herr Schmidt;schmidt@email.de&#10;Wohnung 2.01;1.OG;85;3;Frau Weber;"
+            style={{ minHeight: 200, fontFamily: 'monospace', fontSize: '0.875rem' }}
+          />
+          <p className="form-hint" style={{ marginTop: 8 }}>{batchText.split('\n').filter(l => l.trim()).length} Zeilen erkannt</p>
+        </div>
+        <div className="modal-footer"><button className="btn btn-outline" onClick={() => setShowBatchModal(false)}>Abbrechen</button><button className="btn btn-primary" onClick={saveBatch} disabled={!batchText.trim() || saving}>{saving ? <Loader2 size={18} className="animate-spin" /> : <Upload size={18} />} Importieren</button></div>
       </Modal>
 
       <Modal isOpen={showOptionsConfig} onClose={() => setShowOptionsConfig(false)} title={`Optionen für ${selectedApartment?.name}`} size="modal-lg">
         <div className="modal-body" style={{ maxHeight: '60vh', overflow: 'auto' }}>
-          <p style={{ color: 'var(--gray-500)', marginBottom: '1.5rem' }}>Optionen ausblenden oder individuelle hinzufügen.</p>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+            <p style={{ color: 'var(--gray-500)', margin: 0 }}>Optionen ausblenden oder individuelle hinzufügen.</p>
+            <button className="btn btn-primary btn-sm" onClick={openCustomModal}><Plus size={16} /> Individuelle Option</button>
+          </div>
           {categories.sort((a, b) => a.sort_order - b.sort_order).map(cat => {
             const catOptions = options.filter(o => o.category_id === cat.id)
             const catCustom = customOptions.filter(o => o.category_id === cat.id)
             return (
               <div key={cat.id} style={{ marginBottom: '1.5rem', background: 'var(--gray-50)', borderRadius: 8, padding: '1rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                  <h4 style={{ margin: 0, fontSize: '0.9375rem' }}>{cat.name}</h4>
-                  <button className="btn btn-outline btn-sm" onClick={() => openCustomModal(cat.id)}><Plus size={14} /> Individuell</button>
-                </div>
+                <h4 style={{ margin: '0 0 1rem', fontSize: '0.9375rem' }}>{cat.name}</h4>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {catOptions.map(opt => {
                     const hidden = hiddenOptions.includes(opt.id)
                     return (
                       <div key={opt.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '0.75rem 1rem', background: 'white', borderRadius: 6, border: '1px solid var(--gray-200)', opacity: hidden ? 0.5 : 1 }}>
-                        <label style={{ position: 'relative', width: 20, height: 20 }}>
+                        <label style={{ position: 'relative', width: 20, height: 20, cursor: 'pointer' }}>
                           <input type="checkbox" checked={!hidden} onChange={() => toggleHidden(opt.id)} style={{ opacity: 0, position: 'absolute' }} />
                           <span style={{ position: 'absolute', inset: 0, background: hidden ? 'var(--gray-200)' : 'var(--gs-red)', borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white' }}>{!hidden && <Check size={14} />}</span>
                         </label>
@@ -737,6 +759,7 @@ const ProjectDetail = ({ onLogout }) => {
                   })}
                   {catCustom.map(opt => (
                     <div key={`c${opt.id}`} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '0.75rem 1rem', background: 'rgba(59,130,246,0.05)', borderRadius: 6, border: '1px solid var(--info)' }}>
+                      {opt.image_url && <img src={opt.image_url} alt="" style={{ width: 40, height: 30, objectFit: 'cover', borderRadius: 4 }} />}
                       <div style={{ flex: 1, display: 'flex', justifyContent: 'space-between' }}>
                         <span style={{ fontWeight: 500 }}>{opt.name} <span style={{ padding: '2px 8px', background: 'var(--info)', color: 'white', fontSize: '0.6875rem', borderRadius: 9999, marginLeft: 8 }}>Individuell</span></span>
                         <span>{formatPrice(opt.price)}</span>
@@ -752,13 +775,22 @@ const ProjectDetail = ({ onLogout }) => {
         <div className="modal-footer"><button className="btn btn-primary" onClick={() => setShowOptionsConfig(false)}>Fertig</button></div>
       </Modal>
 
-      <Modal isOpen={showCustomModal} onClose={() => setShowCustomModal(false)} title="Individuelle Option">
+      <Modal isOpen={showCustomModal} onClose={() => setShowCustomModal(false)} title="Individuelle Option hinzufügen">
         <div className="modal-body">
+          <div className="form-group">
+            <label className="form-label">Kategorie *</label>
+            <select className="form-input" value={customForm.category_id} onChange={e => setCustomForm({ ...customForm, category_id: e.target.value })}>
+              {categories.sort((a, b) => a.sort_order - b.sort_order).map(cat => (
+                <option key={cat.id} value={cat.id}>{cat.name}</option>
+              ))}
+            </select>
+          </div>
           <div className="form-group"><label className="form-label">Name *</label><input type="text" className="form-input" value={customForm.name} onChange={e => setCustomForm({ ...customForm, name: e.target.value })} autoFocus /></div>
           <div className="form-group"><label className="form-label">Beschreibung</label><textarea className="form-textarea" value={customForm.description} onChange={e => setCustomForm({ ...customForm, description: e.target.value })} /></div>
-          <div className="form-group"><label className="form-label">Preis (€)</label><input type="number" className="form-input" value={customForm.price} onChange={e => setCustomForm({ ...customForm, price: e.target.value })} /></div>
+          <div className="form-group"><label className="form-label">Preis (€)</label><input type="number" className="form-input" value={customForm.price} onChange={e => setCustomForm({ ...customForm, price: e.target.value })} step="0.01" /></div>
+          <div className="form-group"><label className="form-label">Bild (optional)</label><ImageUpload value={customForm.image_url} onChange={url => setCustomForm({ ...customForm, image_url: url })} /></div>
         </div>
-        <div className="modal-footer"><button className="btn btn-outline" onClick={() => setShowCustomModal(false)}>Abbrechen</button><button className="btn btn-primary" onClick={saveCustomOption} disabled={!customForm.name.trim() || saving}>{saving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />} Hinzufügen</button></div>
+        <div className="modal-footer"><button className="btn btn-outline" onClick={() => setShowCustomModal(false)}>Abbrechen</button><button className="btn btn-primary" onClick={saveCustomOption} disabled={!customForm.name.trim() || !customForm.category_id || saving}>{saving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />} Hinzufügen</button></div>
       </Modal>
 
       <style>{adminStyles}</style>
