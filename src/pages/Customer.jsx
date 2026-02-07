@@ -158,6 +158,7 @@ function Customer() {
   const [isCompleted, setIsCompleted] = useState(false)
   const [draftSaved, setDraftSaved] = useState(false)
   const [downloadFailed, setDownloadFailed] = useState(false)
+  const [pdfGenerating, setPdfGenerating] = useState(false)
   
   // Modal States
   const [infoModal, setInfoModal] = useState({ open: false, title: '', content: '' })
@@ -173,22 +174,230 @@ function Customer() {
     return imgs
   }
 
-  // PDF als Blob herunterladen
+  // PDF generieren und herunterladen
   const downloadPDF = async () => {
     try {
-      const res = await fetch(`/api/pdf?code=${code.toUpperCase()}`)
-      if (!res.ok) throw new Error('Download fehlgeschlagen')
-      const blob = await res.blob()
-      const url = window.URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `Bemusterungsprotokoll_${apartment?.name || 'Auswahl'}.html`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      window.URL.revokeObjectURL(url)
+      // Daten für PDF vom Server holen
+      const res = await fetch(`/api/pdf?code=${code.toUpperCase()}&format=json`)
+      if (!res.ok) throw new Error('Daten konnten nicht geladen werden')
+      const pdfData = await res.json()
+
+      // jsPDF dynamisch laden
+      const loadScript = (src) => new Promise((resolve, reject) => {
+        if (document.querySelector(`script[src="${src}"]`)) { resolve(); return }
+        const s = document.createElement('script')
+        s.src = src; s.onload = resolve; s.onerror = reject
+        document.head.appendChild(s)
+      })
+      await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js')
+
+      const { jsPDF } = window.jspdf
+      const pdf = new jsPDF('p', 'mm', 'a4')
+      const W = pdf.internal.pageSize.getWidth()
+      const H = pdf.internal.pageSize.getHeight()
+      const margin = 15
+      const usable = W - margin * 2
+      let y = margin
+
+      const checkPage = (needed) => {
+        if (y + needed > H - margin) { pdf.addPage(); y = margin; return true }
+        return false
+      }
+
+      // === Briefkopf ===
+      pdf.setDrawColor(227, 6, 19)
+      pdf.setLineWidth(0.8)
+      pdf.line(margin, y + 18, W - margin, y + 18)
+
+      pdf.setFont('helvetica', 'bold')
+      pdf.setFontSize(16)
+      pdf.setTextColor(227, 6, 19)
+      pdf.text('G&S Gruppe', margin, y + 6)
+      pdf.setFont('helvetica', 'normal')
+      pdf.setFontSize(9)
+      pdf.setTextColor(100)
+      pdf.text('Felix-Wankel-Stra\u00dfe 29 \u00b7 53881 Euskirchen', margin, y + 12)
+
+      // Logo rechts (Fallback Text)
+      try {
+        if (pdfData.logoBase64) {
+          pdf.addImage(pdfData.logoBase64, 'JPEG', W - margin - 35, y, 35, 14)
+        } else {
+          pdf.setFontSize(10)
+          pdf.setTextColor(150)
+          pdf.text('G&S', W - margin - 10, y + 8, { align: 'right' })
+        }
+      } catch { /* Logo-Fehler ignorieren */ }
+
+      y += 26
+
+      // === Titel ===
+      pdf.setFont('helvetica', 'bold')
+      pdf.setFontSize(20)
+      pdf.setTextColor(30)
+      pdf.text('Bemusterungsprotokoll', W / 2, y, { align: 'center' })
+      y += 7
+      pdf.setFont('helvetica', 'normal')
+      pdf.setFontSize(10)
+      pdf.setTextColor(120)
+      pdf.text(`Verbindliche Ausstattungsauswahl vom ${pdfData.date}`, W / 2, y, { align: 'center' })
+      y += 10
+
+      // === Info-Boxen ===
+      const boxW = (usable - 6) / 2
+      const boxH = 22
+      const drawInfoBox = (x, yPos, label, value, sub) => {
+        pdf.setFillColor(249, 250, 251)
+        pdf.setDrawColor(229, 231, 235)
+        pdf.roundedRect(x, yPos, boxW, boxH, 2, 2, 'FD')
+        pdf.setFontSize(7)
+        pdf.setTextColor(140)
+        pdf.setFont('helvetica', 'normal')
+        pdf.text(label.toUpperCase(), x + 5, yPos + 6)
+        pdf.setFontSize(11)
+        pdf.setTextColor(30)
+        pdf.setFont('helvetica', 'bold')
+        pdf.text(String(value || '-'), x + 5, yPos + 13)
+        if (sub) {
+          pdf.setFontSize(8)
+          pdf.setTextColor(120)
+          pdf.setFont('helvetica', 'normal')
+          pdf.text(String(sub), x + 5, yPos + 19)
+        }
+      }
+
+      drawInfoBox(margin, y, 'Projekt', pdfData.project_name, pdfData.project_address || '')
+      const aptSub = [pdfData.floor, pdfData.size_sqm ? pdfData.size_sqm + ' m\u00b2' : '', pdfData.rooms ? pdfData.rooms + ' Zimmer' : ''].filter(Boolean).join(' \u00b7 ')
+      drawInfoBox(margin + boxW + 6, y, 'Wohnung', pdfData.apartment_name, aptSub)
+      y += boxH + 4
+      drawInfoBox(margin, y, 'Kunde', pdfData.customer_name || '-', '')
+      drawInfoBox(margin + boxW + 6, y, 'Referenz', pdfData.access_code, `Abgesendet: ${pdfData.date}, ${pdfData.time} Uhr`)
+      y += boxH + 10
+
+      // === Tabelle ===
+      pdf.setFont('helvetica', 'bold')
+      pdf.setFontSize(12)
+      pdf.setTextColor(50)
+      pdf.text('Gew\u00e4hlte Ausstattung', margin, y)
+      y += 7
+
+      // Tabellenkopf
+      const col1 = margin
+      const col2 = margin + usable * 0.28
+      const col3 = W - margin
+      const rowPad = 4
+
+      pdf.setFillColor(31, 41, 55)
+      pdf.rect(margin, y, usable, 9, 'F')
+      pdf.setFontSize(8.5)
+      pdf.setTextColor(255)
+      pdf.setFont('helvetica', 'bold')
+      pdf.text('Kategorie', col1 + 4, y + 6)
+      pdf.text('Gew\u00e4hlte Option', col2 + 4, y + 6)
+      pdf.text('Mehrpreis', col3 - 4, y + 6, { align: 'right' })
+      y += 9
+
+      // Tabellenzeilen
+      pdf.setFont('helvetica', 'normal')
+      const formatEuro = (p) => p === 0 ? 'Inklusive' : (p > 0 ? '+' : '') + p.toLocaleString('de-DE') + ' \u20ac'
+
+      // Bilder vorladen
+      const imageCache = {}
+      for (const sel of pdfData.selections) {
+        if (sel.option_image) {
+          try {
+            const imgRes = await fetch(sel.option_image)
+            if (imgRes.ok) {
+              const blob = await imgRes.blob()
+              const dataUrl = await new Promise(r => { const rd = new FileReader(); rd.onload = () => r(rd.result); rd.readAsDataURL(blob) })
+              imageCache[sel.option_image] = dataUrl
+            }
+          } catch { /* Bild ignorieren */ }
+        }
+      }
+
+      for (let i = 0; i < pdfData.selections.length; i++) {
+        const sel = pdfData.selections[i]
+        const hasImg = imageCache[sel.option_image]
+        const rowH = hasImg ? 16 : 12
+
+        checkPage(rowH + 2)
+
+        // Zebra-Streifen
+        if (i % 2 === 0) {
+          pdf.setFillColor(249, 250, 251)
+          pdf.rect(margin, y, usable, rowH, 'F')
+        }
+
+        // Trennlinie
+        pdf.setDrawColor(229, 231, 235)
+        pdf.setLineWidth(0.2)
+        pdf.line(margin, y + rowH, W - margin, y + rowH)
+
+        // Kategorie
+        pdf.setFontSize(9)
+        pdf.setTextColor(50)
+        pdf.setFont('helvetica', 'bold')
+        pdf.text(sel.category_name, col1 + 4, y + (hasImg ? 8 : 7))
+
+        // Bild + Optionsname
+        let textX = col2 + 4
+        if (hasImg) {
+          try {
+            pdf.addImage(imageCache[sel.option_image], 'JPEG', col2 + 4, y + 2, 14, 10.5)
+            textX = col2 + 22
+          } catch { /* Bild-Fehler ignorieren */ }
+        }
+
+        pdf.setFont('helvetica', 'normal')
+        pdf.setFontSize(9)
+        pdf.setTextColor(30)
+        const maxTextW = col3 - textX - 30
+        const optLines = pdf.splitTextToSize(sel.option_name, maxTextW)
+        pdf.text(optLines[0], textX, y + (hasImg ? 7 : 7))
+        if (sel.option_description && !hasImg) {
+          pdf.setFontSize(7.5)
+          pdf.setTextColor(130)
+          const descLines = pdf.splitTextToSize(sel.option_description, maxTextW)
+          pdf.text(descLines[0], textX, y + 11)
+        }
+
+        // Preis
+        pdf.setFontSize(9)
+        pdf.setTextColor(50)
+        pdf.setFont('helvetica', 'bold')
+        pdf.text(formatEuro(sel.option_price), col3 - 4, y + (hasImg ? 8 : 7), { align: 'right' })
+
+        y += rowH
+      }
+
+      // Gesamt
+      checkPage(14)
+      pdf.setFillColor(31, 41, 55)
+      pdf.rect(margin, y, usable, 11, 'F')
+      pdf.setFontSize(10)
+      pdf.setTextColor(255)
+      pdf.setFont('helvetica', 'bold')
+      pdf.text('Gesamter Mehrpreis zur Basisausstattung', col1 + 4, y + 7.5)
+      pdf.text(formatEuro(pdfData.total_price), col3 - 4, y + 7.5, { align: 'right' })
+      y += 18
+
+      // === Hinweis ===
+      checkPage(25)
+      pdf.setFillColor(249, 250, 251)
+      pdf.setDrawColor(229, 231, 235)
+      pdf.roundedRect(margin, y, usable, 22, 2, 2, 'FD')
+      pdf.setFontSize(7.5)
+      pdf.setTextColor(100)
+      pdf.setFont('helvetica', 'normal')
+      const notice = `Dieses Bemusterungsprotokoll wurde am ${pdfData.date} um ${pdfData.time} Uhr maschinell erstellt und elektronisch \u00fcber das Bemusterungsportal der G&S Gruppe \u00fcbermittelt. Das Dokument ist ohne Unterschrift rechtsg\u00fcltig, da die Auswahl durch den Kunden aktiv und verbindlich im Online-Portal best\u00e4tigt wurde.`
+      const noticeLines = pdf.splitTextToSize(notice, usable - 12)
+      pdf.text(noticeLines, margin + 6, y + 6)
+
+      pdf.save(`Bemusterungsprotokoll_${pdfData.apartment_name || 'Auswahl'}.pdf`)
       return true
-    } catch {
+    } catch (err) {
+      console.error('PDF-Generierung fehlgeschlagen:', err)
       return false
     }
   }
@@ -294,7 +503,9 @@ function Customer() {
       if (res.ok) {
         setIsCompleted(true)
         // Auto-Download des PDF starten
+        setPdfGenerating(true)
         const downloaded = await downloadPDF()
+        setPdfGenerating(false)
         if (!downloaded) {
           setDownloadFailed(true)
         }
@@ -374,12 +585,19 @@ function Customer() {
               <CheckCircle2 size={40} color="var(--success)" />
             </div>
             <h2 style={{ marginBottom: '0.5rem' }}>Bemusterung erfolgreich abgeschlossen!</h2>
-            <p style={{ color: 'var(--gray-500)', maxWidth: 500, margin: '0 auto 1.5rem' }}>
-              Vielen Dank! Ihre Auswahl wurde verbindlich übermittelt.
-              {downloadFailed
-                ? ' Der automatische Download konnte nicht gestartet werden. Bitte laden Sie das Protokoll manuell herunter.'
-                : ' Ihr Bemusterungsprotokoll wurde automatisch heruntergeladen.'}
-            </p>
+            {pdfGenerating ? (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, color: 'var(--gray-500)', marginBottom: '1.5rem' }}>
+                <Loader2 size={20} className="animate-spin" />
+                <span>PDF wird erstellt und heruntergeladen...</span>
+              </div>
+            ) : (
+              <p style={{ color: 'var(--gray-500)', maxWidth: 500, margin: '0 auto 1.5rem' }}>
+                Vielen Dank! Ihre Auswahl wurde verbindlich übermittelt.
+                {downloadFailed
+                  ? ' Der automatische Download konnte nicht gestartet werden. Bitte laden Sie das Protokoll manuell herunter.'
+                  : ' Ihr Bemusterungsprotokoll wurde als PDF heruntergeladen.'}
+              </p>
+            )}
             
             {categories.length > 0 && (
               <div style={{ background: 'var(--gray-50)', borderRadius: '12px', padding: '1.5rem', marginBottom: '2rem', textAlign: 'left' }}>
@@ -404,8 +622,13 @@ function Customer() {
             )}
 
             <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', flexWrap: 'wrap' }}>
-              <button className="btn btn-primary" onClick={async () => { const ok = await downloadPDF(); if (!ok) window.open(`/api/pdf?code=${code.toUpperCase()}`, '_blank') }}>
-                <Download size={18} /> Protokoll herunterladen
+              <button className="btn btn-primary" disabled={pdfGenerating} onClick={async () => { 
+                setPdfGenerating(true)
+                const ok = await downloadPDF()
+                setPdfGenerating(false)
+                if (!ok) window.open(`/api/pdf?code=${code.toUpperCase()}`, '_blank') 
+              }}>
+                {pdfGenerating ? <Loader2 size={18} className="animate-spin" /> : <Download size={18} />} PDF herunterladen
               </button>
               <button className="btn btn-outline" onClick={() => window.open(`/api/pdf?code=${code.toUpperCase()}`, '_blank')}>
                 <FileText size={18} /> Im Browser öffnen

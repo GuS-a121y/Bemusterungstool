@@ -96,47 +96,73 @@ const Modal = ({ isOpen, onClose, title, children, size = '' }) => {
   )
 }
 
-const ImageUpload = ({ value, onChange, label = 'Bild hinzufügen', height = 120 }) => {
+const ImageUpload = ({ value, onChange, onMultiple, multiple = false, label = 'Bild hinzufügen', height = 120 }) => {
   const [isDragging, setIsDragging] = useState(false)
   const [uploading, setUploading] = useState(false)
+  const [uploadCount, setUploadCount] = useState({ done: 0, total: 0 })
   const [preview, setPreview] = useState(value || '')
   const fileRef = useRef(null)
 
   useEffect(() => { setPreview(value || '') }, [value])
 
-  const handleFile = async (file) => {
-    if (!file) return
-    if (!['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(file.type)) {
-      alert('Nur JPG, PNG, WebP, GIF erlaubt'); return
+  const uploadSingleFile = async (file) => {
+    if (!['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(file.type)) return null
+    if (file.size > 5 * 1024 * 1024) return null
+    const formData = new FormData()
+    formData.append('file', file)
+    const res = await fetch('/api/upload', { method: 'POST', body: formData })
+    if (res.ok) {
+      const data = await res.json()
+      return data.url
     }
-    if (file.size > 5 * 1024 * 1024) { alert('Max. 5 MB'); return }
+    return null
+  }
 
+  const handleFiles = async (files) => {
+    const fileList = Array.from(files).filter(f => 
+      ['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(f.type) && f.size <= 5 * 1024 * 1024
+    )
+    if (fileList.length === 0) { alert('Keine gültigen Bilder ausgewählt. Erlaubt: JPG, PNG, WebP, GIF (max. 5 MB)'); return }
+
+    // Multi-Upload Modus
+    if (multiple && onMultiple && fileList.length >= 1) {
+      setUploading(true)
+      setUploadCount({ done: 0, total: fileList.length })
+      const urls = []
+      for (let i = 0; i < fileList.length; i++) {
+        const url = await uploadSingleFile(fileList[i])
+        if (url) urls.push(url)
+        setUploadCount({ done: i + 1, total: fileList.length })
+      }
+      setUploading(false)
+      setUploadCount({ done: 0, total: 0 })
+      if (urls.length > 0) onMultiple(urls)
+      return
+    }
+
+    // Single-Upload Modus (Hauptbild)
+    const file = fileList[0]
     setUploading(true)
     const reader = new FileReader()
     reader.onload = async (e) => {
       setPreview(e.target.result)
-      try {
-        const formData = new FormData()
-        formData.append('file', file)
-        const res = await fetch('/api/upload', { method: 'POST', body: formData })
-        if (res.ok) {
-          const data = await res.json()
-          onChange(data.url)
-        } else {
-          onChange(e.target.result)
-        }
-      } catch {
-        onChange(e.target.result)
-      }
+      const url = await uploadSingleFile(file)
+      onChange(url || e.target.result)
       setUploading(false)
     }
     reader.readAsDataURL(file)
   }
 
+  const handleDrop = (e) => {
+    e.preventDefault()
+    setIsDragging(false)
+    handleFiles(e.dataTransfer.files)
+  }
+
   return (
     <div>
-      <input ref={fileRef} type="file" accept="image/*" onChange={e => handleFile(e.target.files[0])} style={{ display: 'none' }} />
-      {preview ? (
+      <input ref={fileRef} type="file" accept="image/*" multiple={multiple} onChange={e => handleFiles(e.target.files)} style={{ display: 'none' }} />
+      {preview && !multiple ? (
         <div style={{ position: 'relative', borderRadius: 8, overflow: 'hidden' }}>
           <img src={preview} alt="" style={{ width: '100%', height, objectFit: 'cover' }} />
           <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: 8, background: 'linear-gradient(transparent, rgba(0,0,0,0.7))', display: 'flex', justifyContent: 'center', gap: 8 }}>
@@ -146,14 +172,26 @@ const ImageUpload = ({ value, onChange, label = 'Bild hinzufügen', height = 120
         </div>
       ) : (
         <div
-          onDrop={e => { e.preventDefault(); setIsDragging(false); handleFile(e.dataTransfer.files[0]) }}
+          onDrop={handleDrop}
           onDragOver={e => { e.preventDefault(); setIsDragging(true) }}
           onDragLeave={() => setIsDragging(false)}
           onClick={() => fileRef.current?.click()}
-          style={{ border: '2px dashed var(--gray-300)', borderRadius: 8, padding: '1.5rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, cursor: 'pointer', color: 'var(--gray-500)', background: isDragging ? 'rgba(227,6,19,0.05)' : 'var(--gray-50)' }}
+          style={{ border: '2px dashed var(--gray-300)', borderRadius: 8, padding: multiple ? '1rem' : '1.5rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, cursor: 'pointer', color: 'var(--gray-500)', background: isDragging ? 'rgba(227,6,19,0.05)' : 'var(--gray-50)', minHeight: multiple ? 'auto' : undefined }}
         >
-          {uploading ? <Loader2 className="animate-spin" size={24} /> : <ImagePlus size={28} />}
-          <span style={{ fontSize: '0.875rem' }}>{uploading ? 'Hochladen...' : label}</span>
+          {uploading ? (
+            <>
+              <Loader2 className="animate-spin" size={multiple ? 20 : 24} />
+              <span style={{ fontSize: '0.8125rem' }}>
+                {uploadCount.total > 1 ? `${uploadCount.done}/${uploadCount.total} hochgeladen...` : 'Hochladen...'}
+              </span>
+            </>
+          ) : (
+            <>
+              <ImagePlus size={multiple ? 22 : 28} />
+              <span style={{ fontSize: '0.8125rem' }}>{label}</span>
+              {multiple && <span style={{ fontSize: '0.6875rem', color: 'var(--gray-400)' }}>Mehrere Dateien möglich</span>}
+            </>
+          )}
         </div>
       )}
     </div>
@@ -1150,23 +1188,28 @@ const ProjectDetail = ({ onLogout }) => {
                 )}
                 <ImageUpload
                   value=""
-                  onChange={async (url) => {
-                    if (!url) return
+                  multiple={true}
+                  onChange={() => {}}
+                  onMultiple={async (urls) => {
                     if (editItem?.id) {
                       // Direkt in DB speichern
-                      try {
-                        const res = await api.post('/option-images', { option_id: editItem.id, image_url: url })
-                        setAdditionalImages(prev => [...prev, { id: res.id, image_url: url, option_id: editItem.id }])
-                      } catch { alert('Fehler beim Speichern') }
+                      const newImgs = []
+                      for (const url of urls) {
+                        try {
+                          const res = await api.post('/option-images', { option_id: editItem.id, image_url: url })
+                          newImgs.push({ id: res.id, image_url: url, option_id: editItem.id })
+                        } catch { /* einzelne Fehler ignorieren */ }
+                      }
+                      setAdditionalImages(prev => [...prev, ...newImgs])
                     } else {
                       // Noch nicht gespeichert – nur lokal merken
-                      setAdditionalImages(prev => [...prev, { image_url: url }])
+                      setAdditionalImages(prev => [...prev, ...urls.map(url => ({ image_url: url }))])
                     }
                   }}
-                  label="Weiteres Bild hinzufügen"
+                  label="Weitere Bilder hinzufügen"
                   height={60}
                 />
-                <p className="form-hint">Bilder werden als Slider auf der Karte und als Galerie im Popup angezeigt.</p>
+                <p className="form-hint">Mehrere Bilder gleichzeitig per Dateiauswahl oder Drag & Drop. Werden als Slider und Galerie angezeigt.</p>
               </div>
             </div>
           </div>

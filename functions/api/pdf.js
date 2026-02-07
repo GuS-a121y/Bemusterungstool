@@ -97,7 +97,48 @@ export async function onRequestGet(context) {
       totalPrice += s.option_price || 0
     })
 
-    // PDF als HTML generieren – completed_at für Datum verwenden
+    // Format prüfen: JSON für clientseitiges jsPDF oder HTML für Browser-Ansicht
+    const format = url.searchParams.get('format')
+
+    if (format === 'json') {
+      // Datum vom erstmaligen Absenden verwenden
+      const completedDate = apartment.completed_at ? new Date(apartment.completed_at + 'Z') : new Date()
+      const date = completedDate.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })
+      const time = completedDate.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })
+
+      // Logo als Base64 laden (falls in R2 vorhanden)
+      let logoBase64 = null
+      try {
+        if (env.IMAGES) {
+          const logoObj = await env.IMAGES.get('logo.jpg')
+          if (logoObj) {
+            const buf = await logoObj.arrayBuffer()
+            const bytes = new Uint8Array(buf)
+            let binary = ''
+            for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i])
+            logoBase64 = 'data:image/jpeg;base64,' + btoa(binary)
+          }
+        }
+      } catch { /* ignore */ }
+
+      return Response.json({
+        apartment_name: apartment.name,
+        project_name: apartment.project_name,
+        project_address: apartment.project_address,
+        customer_name: apartment.customer_name,
+        access_code: apartment.access_code,
+        floor: apartment.floor,
+        size_sqm: apartment.size_sqm,
+        rooms: apartment.rooms,
+        date,
+        time,
+        logoBase64,
+        selections: selectionDetails,
+        total_price: totalPrice
+      })
+    }
+
+    // HTML-Format für Browser-Ansicht
     const html = generatePDFHtml(apartment, selectionDetails, totalPrice)
 
     return new Response(html, {
