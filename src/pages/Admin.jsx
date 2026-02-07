@@ -3,7 +3,8 @@ import { Routes, Route, useNavigate, useParams } from 'react-router-dom'
 import {
   Building2, Home, FolderOpen, Plus, Edit2, Trash2, Eye, Copy, Check, X,
   ChevronRight, Image, ArrowLeft, Save, AlertCircle, Users, FileSpreadsheet,
-  Lock, LogOut, ImagePlus, Settings2, EyeOff, Loader2, RefreshCw, FileText, Upload
+  Lock, LogOut, ImagePlus, Settings2, EyeOff, Loader2, RefreshCw, FileText, Upload,
+  Archive, RotateCcw, Search, Filter, BarChart3, GripVertical, ChevronDown, TrendingUp
 } from 'lucide-react'
 
 // ============================================
@@ -48,7 +49,10 @@ const api = {
   },
   async delete(endpoint) {
     const res = await fetch(`/api${endpoint}`, { method: 'DELETE' })
-    if (!res.ok) throw new Error('API Fehler')
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}))
+      throw new Error(err.error || 'API Fehler')
+    }
     return res.json()
   }
 }
@@ -68,6 +72,7 @@ const formatPrice = (price) => {
 const StatusBadge = ({ status }) => {
   const config = {
     'aktiv': { cls: 'badge-success', label: 'Aktiv' },
+    'archiviert': { cls: 'badge-warning', label: 'Archiviert' },
     'offen': { cls: 'badge-info', label: 'Offen' },
     'in_bearbeitung': { cls: 'badge-warning', label: 'In Bearbeitung' },
     'abgeschlossen': { cls: 'badge-success', label: 'Abgeschlossen' },
@@ -156,6 +161,87 @@ const ImageUpload = ({ value, onChange, label = 'Bild hinzufügen', height = 120
 }
 
 // ============================================
+// DRAG & DROP SORTIERBARE LISTE
+// ============================================
+const DraggableList = ({ items, onReorder, renderItem }) => {
+  const [dragIndex, setDragIndex] = useState(null)
+  const [overIndex, setOverIndex] = useState(null)
+
+  const handleDragStart = (e, index) => {
+    setDragIndex(index)
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', index)
+    e.currentTarget.style.opacity = '0.5'
+  }
+
+  const handleDragEnd = (e) => {
+    e.currentTarget.style.opacity = '1'
+    if (dragIndex !== null && overIndex !== null && dragIndex !== overIndex) {
+      const newItems = [...items]
+      const [moved] = newItems.splice(dragIndex, 1)
+      newItems.splice(overIndex, 0, moved)
+      onReorder(newItems)
+    }
+    setDragIndex(null)
+    setOverIndex(null)
+  }
+
+  const handleDragOver = (e, index) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    setOverIndex(index)
+  }
+
+  return (
+    <div>
+      {items.map((item, index) => (
+        <div
+          key={item.id}
+          draggable
+          onDragStart={e => handleDragStart(e, index)}
+          onDragEnd={handleDragEnd}
+          onDragOver={e => handleDragOver(e, index)}
+          style={{
+            borderTop: overIndex === index && dragIndex > index ? '3px solid var(--gs-red)' : '3px solid transparent',
+            borderBottom: overIndex === index && dragIndex < index ? '3px solid var(--gs-red)' : '3px solid transparent',
+            transition: 'border-color 0.15s ease'
+          }}
+        >
+          {renderItem(item, index)}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// ============================================
+// STATISTIK-BAR CHART
+// ============================================
+const StatBar = ({ label, count, total, price, isDefault, color }) => {
+  const pct = total > 0 ? (count / total) * 100 : 0
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '0.5rem 0' }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+          <span style={{ fontSize: '0.875rem', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {label} {isDefault ? <span style={{ fontSize: '0.6875rem', color: 'var(--gray-400)' }}>(Standard)</span> : ''}
+          </span>
+          <span style={{ fontSize: '0.8125rem', color: 'var(--gray-500)', whiteSpace: 'nowrap', marginLeft: 8 }}>
+            {count}× ({Math.round(pct)}%)
+          </span>
+        </div>
+        <div style={{ height: 8, background: 'var(--gray-200)', borderRadius: 4, overflow: 'hidden' }}>
+          <div style={{ height: '100%', width: `${pct}%`, background: color || 'var(--gs-red)', borderRadius: 4, transition: 'width 0.5s ease' }} />
+        </div>
+      </div>
+      <span style={{ fontSize: '0.8125rem', fontWeight: 500, color: price === 0 ? 'var(--gray-500)' : price > 0 ? 'var(--gs-red)' : 'var(--success)', minWidth: 70, textAlign: 'right' }}>
+        {price === 0 ? 'Inkl.' : `${price > 0 ? '+' : ''}${price.toLocaleString('de-DE')} €`}
+      </span>
+    </div>
+  )
+}
+
+// ============================================
 // LOGIN
 // ============================================
 const LoginPage = ({ onLogin }) => {
@@ -193,11 +279,12 @@ const LoginPage = ({ onLogin }) => {
 }
 
 // ============================================
-// PROJEKT-LISTE
+// PROJEKT-LISTE (mit Filter, Archiv, Suche)
 // ============================================
 const ProjectList = ({ onLogout }) => {
   const navigate = useNavigate()
   const [projects, setProjects] = useState([])
+  const [allProjects, setAllProjects] = useState([]) // inkl. archivierte
   const [apartments, setApartments] = useState([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
@@ -205,12 +292,20 @@ const ProjectList = ({ onLogout }) => {
   const [formData, setFormData] = useState({ name: '', description: '', address: '', intro_text: '', project_logo: '', project_image: '' })
   const [saving, setSaving] = useState(false)
   const [activeTab, setActiveTab] = useState('basic')
+  // Filter & Suche
+  const [searchTerm, setSearchTerm] = useState('')
+  const [showArchive, setShowArchive] = useState(false)
 
   const loadData = useCallback(async () => {
     setLoading(true)
     try {
-      const [projRes, aptRes] = await Promise.all([api.get('/projects'), api.get('/apartments')])
+      const [projRes, allProjRes, aptRes] = await Promise.all([
+        api.get('/projects'),
+        api.get('/projects?include_archived=true'),
+        api.get('/apartments')
+      ])
       setProjects(projRes.projects || [])
+      setAllProjects(allProjRes.projects || [])
       setApartments(aptRes.apartments || [])
     } catch (err) { console.error(err) }
     setLoading(false)
@@ -228,12 +323,7 @@ const ProjectList = ({ onLogout }) => {
       project_logo: project.project_logo || '',
       project_image: project.project_image || ''
     } : { 
-      name: '', 
-      description: '', 
-      address: '',
-      intro_text: '',
-      project_logo: '',
-      project_image: ''
+      name: '', description: '', address: '', intro_text: '', project_logo: '', project_image: ''
     })
     setActiveTab('basic')
     setShowModal(true)
@@ -251,11 +341,30 @@ const ProjectList = ({ onLogout }) => {
     setSaving(false)
   }
 
-  const handleDelete = async (e, id) => {
+  const handleArchive = async (e, id) => {
     e.stopPropagation()
-    if (!confirm('Projekt wirklich löschen?')) return
-    try { await api.delete(`/projects?id=${id}`); loadData() } catch { alert('Fehler') }
+    if (!confirm('Projekt archivieren? Sie können es später aus dem Archiv wiederherstellen.')) return
+    try { await api.delete(`/projects?id=${id}`); loadData() } catch (err) { alert(err.message) }
   }
+
+  const handleRestore = async (e, id) => {
+    e.stopPropagation()
+    try { await api.put('/projects', { id, status: 'aktiv', name: allProjects.find(p => p.id === id)?.name }); loadData() } catch (err) { alert(err.message) }
+  }
+
+  const handleDeletePermanent = async (e, id) => {
+    e.stopPropagation()
+    if (!confirm('Projekt ENDGÜLTIG löschen? Dies kann nicht rückgängig gemacht werden! Alle Wohnungen, Kategorien und Kundenauswahlen werden gelöscht.')) return
+    try { await api.delete(`/projects?id=${id}&permanent=true`); loadData() } catch (err) { alert(err.message) }
+  }
+
+  // Gefilterte Projekte
+  const archivedProjects = allProjects.filter(p => p.status === 'archiviert')
+  const displayProjects = (showArchive ? archivedProjects : projects).filter(p => {
+    if (!searchTerm) return true
+    const term = searchTerm.toLowerCase()
+    return p.name.toLowerCase().includes(term) || (p.address || '').toLowerCase().includes(term)
+  })
 
   if (loading) return <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Loader2 className="animate-spin" size={32} /></div>
 
@@ -271,7 +380,7 @@ const ProjectList = ({ onLogout }) => {
         </div>
       </header>
       <div className="admin-content">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
           <div>
             <h2 style={{ fontSize: '1.75rem', marginBottom: '0.25rem' }}>Projekte</h2>
             <p style={{ color: 'var(--gray-500)' }}>Wählen Sie ein Projekt oder erstellen Sie ein neues.</p>
@@ -281,41 +390,90 @@ const ProjectList = ({ onLogout }) => {
             <button className="btn btn-primary" onClick={() => openModal()}><Plus size={18} /> Neues Projekt</button>
           </div>
         </div>
+
+        {/* Filter-Leiste */}
+        <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+          <div style={{ position: 'relative', flex: '1 1 260px', maxWidth: 360 }}>
+            <Search size={18} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--gray-400)' }} />
+            <input
+              type="text"
+              className="form-input"
+              placeholder="Projekte durchsuchen..."
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              style={{ paddingLeft: 40, margin: 0 }}
+            />
+          </div>
+          <button
+            className={`btn ${showArchive ? 'btn-primary' : 'btn-outline'}`}
+            onClick={() => setShowArchive(!showArchive)}
+            style={{ position: 'relative' }}
+          >
+            <Archive size={18} /> Archiv
+            {archivedProjects.length > 0 && (
+              <span style={{ background: showArchive ? 'white' : 'var(--gs-red)', color: showArchive ? 'var(--gs-red)' : 'white', borderRadius: 99, padding: '1px 7px', fontSize: '0.75rem', fontWeight: 600, marginLeft: 4 }}>
+                {archivedProjects.length}
+              </span>
+            )}
+          </button>
+        </div>
+
+        {showArchive && (
+          <div style={{ background: 'rgba(255,193,7,0.1)', border: '1px solid rgba(255,193,7,0.3)', borderRadius: 8, padding: '0.75rem 1rem', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.875rem', color: 'var(--gray-700)' }}>
+            <Archive size={16} /> Sie sehen archivierte Projekte. Hier können Sie Projekte wiederherstellen oder endgültig löschen.
+          </div>
+        )}
+
         <div className="project-grid">
-          {projects.map(project => {
+          {displayProjects.map(project => {
             const projectApts = apartments.filter(a => a.project_id === project.id)
             const completed = projectApts.filter(a => a.status === 'abgeschlossen').length
+            const isArchived = project.status === 'archiviert'
             return (
-              <div key={project.id} className="project-card" onClick={() => navigate(`/admin/projekt/${project.id}`)}>
+              <div key={project.id} className={`project-card ${isArchived ? 'project-card-archived' : ''}`} onClick={() => !isArchived && navigate(`/admin/projekt/${project.id}`)}>
                 <div className="project-card-header">
                   {project.project_logo ? (
-                    <img src={project.project_logo} alt="" style={{ height: 28, maxWidth: 120, objectFit: 'contain' }} />
+                    <img src={project.project_logo} alt="" style={{ height: 28, maxWidth: 120, objectFit: 'contain', opacity: isArchived ? 0.5 : 1 }} />
                   ) : (
                     <Building2 size={24} />
                   )}
-                  <div className="project-card-actions">
-                    <button className="btn btn-ghost btn-icon btn-sm" onClick={e => { e.stopPropagation(); openModal(project) }}><Edit2 size={16} /></button>
-                    <button className="btn btn-ghost btn-icon btn-sm" onClick={e => handleDelete(e, project.id)} style={{ color: 'var(--error)' }}><Trash2 size={16} /></button>
+                  <div className="project-card-actions" style={{ opacity: 1 }}>
+                    {isArchived ? (
+                      <>
+                        <button className="btn btn-ghost btn-icon btn-sm" onClick={e => handleRestore(e, project.id)} title="Wiederherstellen" style={{ color: 'var(--success)' }}><RotateCcw size={16} /></button>
+                        <button className="btn btn-ghost btn-icon btn-sm" onClick={e => handleDeletePermanent(e, project.id)} title="Endgültig löschen" style={{ color: 'var(--error)' }}><Trash2 size={16} /></button>
+                      </>
+                    ) : (
+                      <>
+                        <button className="btn btn-ghost btn-icon btn-sm" onClick={e => { e.stopPropagation(); openModal(project) }}><Edit2 size={16} /></button>
+                        <button className="btn btn-ghost btn-icon btn-sm" onClick={e => handleArchive(e, project.id)} style={{ color: 'var(--gray-500)' }} title="Archivieren"><Archive size={16} /></button>
+                      </>
+                    )}
                   </div>
                 </div>
-                <h3 className="project-card-title">{project.name}</h3>
+                {isArchived && <div style={{ marginBottom: 8 }}><StatusBadge status="archiviert" /></div>}
+                <h3 className="project-card-title" style={{ opacity: isArchived ? 0.6 : 1 }}>{project.name}</h3>
                 {project.address && <p className="project-card-address">{project.address}</p>}
                 <div className="project-card-stats">
                   <div className="project-card-stat"><Home size={16} /><span>{projectApts.length} Wohnungen</span></div>
                 </div>
-                <div className="project-card-progress">
-                  <div className="progress-bar"><div className="progress-fill" style={{ width: `${projectApts.length ? (completed / projectApts.length) * 100 : 0}%` }} /></div>
-                  <span className="progress-text">{completed} von {projectApts.length} abgeschlossen</span>
-                </div>
-                <div className="project-card-footer"><span>Projekt öffnen</span><ChevronRight size={18} /></div>
+                {!isArchived && (
+                  <>
+                    <div className="project-card-progress">
+                      <div className="progress-bar"><div className="progress-fill" style={{ width: `${projectApts.length ? (completed / projectApts.length) * 100 : 0}%` }} /></div>
+                      <span className="progress-text">{completed} von {projectApts.length} abgeschlossen</span>
+                    </div>
+                    <div className="project-card-footer"><span>Projekt öffnen</span><ChevronRight size={18} /></div>
+                  </>
+                )}
               </div>
             )
           })}
-          {projects.length === 0 && (
+          {displayProjects.length === 0 && (
             <div className="empty-state" style={{ gridColumn: '1 / -1' }}>
-              <Building2 size={48} style={{ color: 'var(--gray-300)', marginBottom: '1rem' }} />
-              <div className="empty-state-title">Keine Projekte</div>
-              <button className="btn btn-primary mt-4" onClick={() => openModal()}><Plus size={18} /> Neues Projekt</button>
+              {showArchive ? <Archive size={48} style={{ color: 'var(--gray-300)', marginBottom: '1rem' }} /> : <Building2 size={48} style={{ color: 'var(--gray-300)', marginBottom: '1rem' }} />}
+              <div className="empty-state-title">{showArchive ? 'Keine archivierten Projekte' : (searchTerm ? 'Keine Treffer' : 'Keine Projekte')}</div>
+              {!showArchive && !searchTerm && <button className="btn btn-primary mt-4" onClick={() => openModal()}><Plus size={18} /> Neues Projekt</button>}
             </div>
           )}
         </div>
@@ -376,7 +534,7 @@ const ProjectList = ({ onLogout }) => {
 }
 
 // ============================================
-// PROJEKT-DETAIL (Kategorien, Optionen, Wohnungen)
+// PROJEKT-DETAIL (Kategorien, Optionen, Wohnungen, Statistiken)
 // ============================================
 const ProjectDetail = ({ onLogout }) => {
   const { projectId } = useParams()
@@ -388,6 +546,10 @@ const ProjectDetail = ({ onLogout }) => {
   const [apartments, setApartments] = useState([])
   const [activeTab, setActiveTab] = useState('categories')
   const [copiedCode, setCopiedCode] = useState(null)
+
+  // Statistiken
+  const [stats, setStats] = useState(null)
+  const [statsLoading, setStatsLoading] = useState(false)
 
   // Modals
   const [showCategoryModal, setShowCategoryModal] = useState(false)
@@ -405,9 +567,9 @@ const ProjectDetail = ({ onLogout }) => {
   const [error, setError] = useState('')
 
   // Forms
-  const [categoryForm, setCategoryForm] = useState({ name: '', description: '', sort_order: 1 })
+  const [categoryForm, setCategoryForm] = useState({ name: '', description: '' })
   const [optionForm, setOptionForm] = useState({ name: '', description: '', info_text: '', price: '0', is_default: 0, image_url: '' })
-  const [apartmentForm, setApartmentForm] = useState({ name: '', floor: '', size_sqm: '', rooms: '', customer_name: '', customer_email: '' })
+  const [apartmentForm, setApartmentForm] = useState({ name: '', floor: '', size_sqm: '', rooms: '', customer_name: '' })
   const [customForm, setCustomForm] = useState({ category_id: '', new_category_name: '', use_new_category: false, name: '', description: '', info_text: '', price: '0', image_url: '' })
   const [batchText, setBatchText] = useState('')
 
@@ -415,7 +577,7 @@ const ProjectDetail = ({ onLogout }) => {
     setLoading(true)
     try {
       const [projRes, catRes, optRes, aptRes] = await Promise.all([
-        api.get('/projects'),
+        api.get('/projects?include_archived=true'),
         api.get(`/categories?project_id=${projectId}`),
         api.get(`/options?project_id=${projectId}`),
         api.get(`/apartments?project_id=${projectId}`)
@@ -428,12 +590,22 @@ const ProjectDetail = ({ onLogout }) => {
     setLoading(false)
   }, [projectId])
 
+  const loadStats = useCallback(async () => {
+    setStatsLoading(true)
+    try {
+      const data = await api.get(`/stats?project_id=${projectId}`)
+      setStats(data)
+    } catch (err) { console.error(err) }
+    setStatsLoading(false)
+  }, [projectId])
+
   useEffect(() => { loadData() }, [loadData])
+  useEffect(() => { if (activeTab === 'stats') loadStats() }, [activeTab, loadStats])
 
   // Kategorie
   const openCategoryModal = (cat = null) => {
     setEditItem(cat)
-    setCategoryForm(cat ? { name: cat.name, description: cat.description || '', sort_order: cat.sort_order } : { name: '', description: '', sort_order: categories.length + 1 })
+    setCategoryForm(cat ? { name: cat.name, description: cat.description || '' } : { name: '', description: '' })
     setShowCategoryModal(true)
   }
 
@@ -441,8 +613,8 @@ const ProjectDetail = ({ onLogout }) => {
     if (!categoryForm.name.trim()) return
     setSaving(true)
     try {
-      if (editItem) await api.put('/categories', { id: editItem.id, ...categoryForm, sort_order: parseInt(categoryForm.sort_order) })
-      else await api.post('/categories', { project_id: parseInt(projectId), ...categoryForm, sort_order: parseInt(categoryForm.sort_order) })
+      if (editItem) await api.put('/categories', { id: editItem.id, ...categoryForm, sort_order: editItem.sort_order })
+      else await api.post('/categories', { project_id: parseInt(projectId), ...categoryForm })
       setShowCategoryModal(false)
       loadData()
     } catch (err) { alert(err.message) }
@@ -454,17 +626,34 @@ const ProjectDetail = ({ onLogout }) => {
     try { await api.delete(`/categories?id=${id}`); loadData() } catch { alert('Fehler') }
   }
 
+  // Drag & Drop Reorder Kategorien
+  const handleReorderCategories = async (newCategories) => {
+    const reordered = newCategories.map((cat, i) => ({ ...cat, sort_order: i + 1 }))
+    setCategories(reordered)
+    try {
+      await api.post('/reorder', { type: 'categories', items: reordered.map(c => ({ id: c.id, sort_order: c.sort_order })) })
+    } catch { alert('Fehler beim Speichern der Reihenfolge') }
+  }
+
+  // Drag & Drop Reorder Optionen innerhalb einer Kategorie
+  const handleReorderOptions = async (categoryId, newOptions) => {
+    const reordered = newOptions.map((opt, i) => ({ ...opt, sort_order: i + 1 }))
+    setOptions(prev => {
+      const other = prev.filter(o => o.category_id !== categoryId)
+      return [...other, ...reordered]
+    })
+    try {
+      await api.post('/reorder', { type: 'options', items: reordered.map(o => ({ id: o.id, sort_order: o.sort_order })) })
+    } catch { alert('Fehler beim Speichern der Reihenfolge') }
+  }
+
   // Option
   const openOptionModal = (catId, opt = null) => {
     setSelectedCategory(catId)
     setEditItem(opt)
     setOptionForm(opt ? { 
-      name: opt.name, 
-      description: opt.description || '', 
-      info_text: opt.info_text || '',
-      price: opt.price.toString(), 
-      is_default: opt.is_default, 
-      image_url: opt.image_url || '' 
+      name: opt.name, description: opt.description || '', info_text: opt.info_text || '',
+      price: opt.price.toString(), is_default: opt.is_default, image_url: opt.image_url || '' 
     } : { name: '', description: '', info_text: '', price: '0', is_default: 0, image_url: '' })
     setShowOptionModal(true)
   }
@@ -474,7 +663,7 @@ const ProjectDetail = ({ onLogout }) => {
     setSaving(true)
     try {
       const data = { ...optionForm, price: parseFloat(optionForm.price) || 0, is_default: optionForm.is_default ? 1 : 0 }
-      if (editItem) await api.put('/options', { id: editItem.id, category_id: selectedCategory, ...data })
+      if (editItem) await api.put('/options', { id: editItem.id, category_id: selectedCategory, ...data, sort_order: editItem.sort_order || 0 })
       else await api.post('/options', { category_id: selectedCategory, ...data })
       setShowOptionModal(false)
       loadData()
@@ -487,14 +676,14 @@ const ProjectDetail = ({ onLogout }) => {
     try { await api.delete(`/options?id=${id}`); loadData() } catch { alert('Fehler') }
   }
 
-  // Wohnung (Einzeln)
+  // Wohnung (Einzeln) - OHNE E-Mail
   const openApartmentModal = (apt = null) => {
     setEditItem(apt)
     setError('')
     setApartmentForm(apt ? {
       name: apt.name, floor: apt.floor || '', size_sqm: apt.size_sqm?.toString() || '', rooms: apt.rooms?.toString() || '',
-      customer_name: apt.customer_name || '', customer_email: apt.customer_email || ''
-    } : { name: '', floor: '', size_sqm: '', rooms: '', customer_name: '', customer_email: '' })
+      customer_name: apt.customer_name || ''
+    } : { name: '', floor: '', size_sqm: '', rooms: '', customer_name: '' })
     setShowApartmentModal(true)
   }
 
@@ -522,7 +711,7 @@ const ProjectDetail = ({ onLogout }) => {
     try { await api.delete(`/apartments?id=${id}`); loadData() } catch { alert('Fehler') }
   }
 
-  // Batch-Erstellung
+  // Batch-Erstellung - OHNE E-Mail
   const openBatchModal = () => {
     setBatchText('')
     setError('')
@@ -540,8 +729,7 @@ const ProjectDetail = ({ onLogout }) => {
         floor: parts[1] || '',
         size_sqm: parts[2] || '',
         rooms: parts[3] || '',
-        customer_name: parts[4] || '',
-        customer_email: parts[5] || ''
+        customer_name: parts[4] || ''
       }
     }).filter(a => a.name)
 
@@ -594,13 +782,8 @@ const ProjectDetail = ({ onLogout }) => {
   const openCustomModal = () => {
     setCustomForm({ 
       category_id: categories[0]?.id?.toString() || '', 
-      new_category_name: '',
-      use_new_category: false,
-      name: '', 
-      description: '',
-      info_text: '',
-      price: '0', 
-      image_url: '' 
+      new_category_name: '', use_new_category: false,
+      name: '', description: '', info_text: '', price: '0', image_url: '' 
     })
     setError('')
     setShowCustomModal(true)
@@ -610,14 +793,8 @@ const ProjectDetail = ({ onLogout }) => {
     if (!customForm.name.trim()) return
     
     const useNewCat = customForm.use_new_category
-    if (useNewCat && !customForm.new_category_name.trim()) {
-      setError('Bitte Kategoriename eingeben')
-      return
-    }
-    if (!useNewCat && !customForm.category_id) {
-      setError('Bitte Kategorie auswählen')
-      return
-    }
+    if (useNewCat && !customForm.new_category_name.trim()) { setError('Bitte Kategoriename eingeben'); return }
+    if (!useNewCat && !customForm.category_id) { setError('Bitte Kategorie auswählen'); return }
 
     setSaving(true)
     setError('')
@@ -629,8 +806,7 @@ const ProjectDetail = ({ onLogout }) => {
         const catResult = await api.post('/categories', {
           project_id: parseInt(projectId),
           name: customForm.new_category_name.trim(),
-          description: '',
-          sort_order: categories.length + 1
+          description: ''
         })
         categoryId = catResult.id
         const catRes = await api.get(`/categories?project_id=${projectId}`)
@@ -665,6 +841,8 @@ const ProjectDetail = ({ onLogout }) => {
   if (loading) return <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Loader2 className="animate-spin" size={32} /></div>
   if (!project) return <div className="admin-page"><div className="admin-content" style={{ textAlign: 'center', paddingTop: '4rem' }}><AlertCircle size={48} style={{ color: 'var(--gray-300)' }} /><h2>Projekt nicht gefunden</h2><button className="btn btn-primary mt-4" onClick={() => navigate('/admin')}><ArrowLeft size={18} /> Zurück</button></div></div>
 
+  const sortedCategories = [...categories].sort((a, b) => a.sort_order - b.sort_order)
+
   return (
     <div className="admin-page">
       <header className="admin-header">
@@ -687,24 +865,31 @@ const ProjectDetail = ({ onLogout }) => {
         <div className="tabs">
           <button className={`tab ${activeTab === 'categories' ? 'active' : ''}`} onClick={() => setActiveTab('categories')}><FolderOpen size={18} /> Kategorien & Optionen</button>
           <button className={`tab ${activeTab === 'apartments' ? 'active' : ''}`} onClick={() => setActiveTab('apartments')}><Users size={18} /> Wohnungen & Kunden</button>
+          <button className={`tab ${activeTab === 'stats' ? 'active' : ''}`} onClick={() => setActiveTab('stats')}><BarChart3 size={18} /> Statistiken</button>
         </div>
 
+        {/* ===== KATEGORIEN TAB mit Drag & Drop ===== */}
         {activeTab === 'categories' && (
           <div>
             <div className="section-header">
-              <div><h3>Bemusterungskategorien</h3><p>Standard-Kategorien und Optionen für dieses Projekt.</p></div>
+              <div><h3>Bemusterungskategorien</h3><p>Kategorien und Optionen per Drag & Drop sortieren.</p></div>
               <button className="btn btn-primary" onClick={() => openCategoryModal()}><Plus size={18} /> Neue Kategorie</button>
             </div>
-            {categories.length === 0 ? (
+            {sortedCategories.length === 0 ? (
               <div className="empty-state"><FolderOpen size={48} style={{ color: 'var(--gray-300)' }} /><div className="empty-state-title">Keine Kategorien</div></div>
             ) : (
-              <div className="categories-list">
-                {categories.sort((a, b) => a.sort_order - b.sort_order).map(cat => {
+              <DraggableList
+                items={sortedCategories}
+                onReorder={handleReorderCategories}
+                renderItem={(cat) => {
                   const catOptions = options.filter(o => o.category_id === cat.id).sort((a, b) => a.sort_order - b.sort_order)
                   return (
-                    <div key={cat.id} className="category-card">
+                    <div className="category-card" style={{ marginBottom: '1rem' }}>
                       <div className="category-header">
-                        <div><span className="category-order">{cat.sort_order}</span><h4>{cat.name}</h4>{cat.description && <p>{cat.description}</p>}</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                          <GripVertical size={20} style={{ color: 'var(--gray-400)', cursor: 'grab', flexShrink: 0 }} />
+                          <div><h4 style={{ margin: 0 }}>{cat.name}</h4>{cat.description && <p style={{ margin: '0.25rem 0 0', color: 'var(--gray-500)', fontSize: '0.875rem' }}>{cat.description}</p>}</div>
+                        </div>
                         <div style={{ display: 'flex', gap: 8 }}>
                           <button className="btn btn-outline btn-sm" onClick={() => openOptionModal(cat.id)}><Plus size={16} /> Option</button>
                           <button className="btn btn-ghost btn-icon btn-sm" onClick={() => openCategoryModal(cat)}><Edit2 size={16} /></button>
@@ -712,31 +897,44 @@ const ProjectDetail = ({ onLogout }) => {
                         </div>
                       </div>
                       {catOptions.length > 0 ? (
-                        <table style={{ margin: 0 }}>
-                          <thead><tr><th style={{ width: 70 }}>Bild</th><th>Option</th><th style={{ width: 120 }}>Preis</th><th style={{ width: 80 }}>Standard</th><th style={{ width: 90 }}></th></tr></thead>
-                          <tbody>
-                            {catOptions.map(opt => (
-                              <tr key={opt.id}>
-                                <td>{opt.image_url ? <img src={opt.image_url} alt="" style={{ width: 56, height: 42, objectFit: 'cover', borderRadius: 4 }} /> : <div style={{ width: 56, height: 42, background: 'var(--gray-100)', borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Image size={18} color="var(--gray-300)" /></div>}</td>
-                                <td><div style={{ fontWeight: 500 }}>{opt.name}</div>{opt.description && <div style={{ fontSize: '0.8125rem', color: 'var(--gray-500)' }}>{opt.description}</div>}</td>
-                                <td>{formatPrice(opt.price)}</td>
-                                <td>{opt.is_default ? <Check size={18} color="var(--success)" /> : null}</td>
-                                <td><div style={{ display: 'flex', gap: 4 }}><button className="btn btn-ghost btn-icon btn-sm" onClick={() => openOptionModal(cat.id, opt)}><Edit2 size={14} /></button><button className="btn btn-ghost btn-icon btn-sm" onClick={() => deleteOption(opt.id)} style={{ color: 'var(--error)' }}><Trash2 size={14} /></button></div></td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
+                        <div style={{ padding: '0.5rem' }}>
+                          <DraggableList
+                            items={catOptions}
+                            onReorder={(newOpts) => handleReorderOptions(cat.id, newOpts)}
+                            renderItem={(opt) => (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '0.75rem 1rem', background: 'white', borderRadius: 6, border: '1px solid var(--gray-200)', marginBottom: 4 }}>
+                                <GripVertical size={16} style={{ color: 'var(--gray-400)', cursor: 'grab', flexShrink: 0 }} />
+                                {opt.image_url ? (
+                                  <img src={opt.image_url} alt="" style={{ width: 56, height: 42, objectFit: 'cover', borderRadius: 4, flexShrink: 0 }} />
+                                ) : (
+                                  <div style={{ width: 56, height: 42, background: 'var(--gray-100)', borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Image size={18} color="var(--gray-300)" /></div>
+                                )}
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                  <div style={{ fontWeight: 500 }}>{opt.name}</div>
+                                  {opt.description && <div style={{ fontSize: '0.8125rem', color: 'var(--gray-500)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{opt.description}</div>}
+                                </div>
+                                <div style={{ minWidth: 90, textAlign: 'right' }}>{formatPrice(opt.price)}</div>
+                                {opt.is_default ? <Check size={18} color="var(--success)" style={{ flexShrink: 0 }} /> : <div style={{ width: 18 }} />}
+                                <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                                  <button className="btn btn-ghost btn-icon btn-sm" onClick={() => openOptionModal(cat.id, opt)}><Edit2 size={14} /></button>
+                                  <button className="btn btn-ghost btn-icon btn-sm" onClick={() => deleteOption(opt.id)} style={{ color: 'var(--error)' }}><Trash2 size={14} /></button>
+                                </div>
+                              </div>
+                            )}
+                          />
+                        </div>
                       ) : (
                         <div style={{ padding: '1.5rem', textAlign: 'center', color: 'var(--gray-400)' }}>Noch keine Optionen</div>
                       )}
                     </div>
                   )
-                })}
-              </div>
+                }}
+              />
             )}
           </div>
         )}
 
+        {/* ===== WOHNUNGEN TAB ===== */}
         {activeTab === 'apartments' && (
           <div>
             <div className="section-header">
@@ -757,7 +955,7 @@ const ProjectDetail = ({ onLogout }) => {
                     {apartments.map(apt => (
                       <tr key={apt.id}>
                         <td><div style={{ fontWeight: 600 }}>{apt.name}</div><div style={{ fontSize: '0.8125rem', color: 'var(--gray-500)' }}>{[apt.floor, apt.size_sqm && `${apt.size_sqm} m²`, apt.rooms && `${apt.rooms} Zi.`].filter(Boolean).join(' · ')}</div></td>
-                        <td><div style={{ fontWeight: 500 }}>{apt.customer_name || '-'}</div>{apt.customer_email && <div style={{ fontSize: '0.8125rem', color: 'var(--gray-500)' }}>{apt.customer_email}</div>}</td>
+                        <td><div style={{ fontWeight: 500 }}>{apt.customer_name || '-'}</div></td>
                         <td><div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><code className="access-code">{apt.access_code}</code><button className="btn btn-ghost btn-icon btn-sm" onClick={() => copyCode(apt.access_code)}>{copiedCode === apt.access_code ? <Check size={14} color="var(--success)" /> : <Copy size={14} />}</button></div></td>
                         <td><StatusBadge status={apt.status} /></td>
                         <td><div style={{ display: 'flex', gap: 4 }}>
@@ -775,18 +973,110 @@ const ProjectDetail = ({ onLogout }) => {
             )}
           </div>
         )}
+
+        {/* ===== STATISTIKEN TAB ===== */}
+        {activeTab === 'stats' && (
+          <div>
+            <div className="section-header">
+              <div><h3>Statistiken</h3><p>Übersicht über den Bemusterungsfortschritt und Auswahl-Verteilung.</p></div>
+              <button className="btn btn-outline" onClick={loadStats}><RefreshCw size={18} /></button>
+            </div>
+            {statsLoading ? (
+              <div style={{ textAlign: 'center', padding: '3rem' }}><Loader2 className="animate-spin" size={32} /></div>
+            ) : stats ? (
+              <>
+                {/* Overview Cards */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
+                  <div className="stat-card">
+                    <div className="stat-value">{stats.overview?.total_apartments || 0}</div>
+                    <div className="stat-label">Wohnungen gesamt</div>
+                  </div>
+                  <div className="stat-card" style={{ borderLeft: '4px solid var(--success)' }}>
+                    <div className="stat-value" style={{ color: 'var(--success)' }}>{stats.overview?.completed || 0}</div>
+                    <div className="stat-label">Abgeschlossen</div>
+                  </div>
+                  <div className="stat-card" style={{ borderLeft: '4px solid var(--warning)' }}>
+                    <div className="stat-value" style={{ color: 'var(--warning)' }}>{stats.overview?.in_progress || 0}</div>
+                    <div className="stat-label">In Bearbeitung</div>
+                  </div>
+                  <div className="stat-card" style={{ borderLeft: '4px solid var(--gray-400)' }}>
+                    <div className="stat-value">{stats.overview?.open || 0}</div>
+                    <div className="stat-label">Offen</div>
+                  </div>
+                  <div className="stat-card" style={{ borderLeft: '4px solid var(--gs-red)' }}>
+                    <div className="stat-value" style={{ color: 'var(--gs-red)' }}>{Math.round(stats.avg_additional_price || 0).toLocaleString('de-DE')} €</div>
+                    <div className="stat-label">⌀ Mehrpreis</div>
+                  </div>
+                </div>
+
+                {/* Fortschrittsbalken */}
+                {stats.overview?.total_apartments > 0 && (
+                  <div style={{ background: 'white', borderRadius: 8, padding: '1.5rem', boxShadow: 'var(--shadow)', marginBottom: '2rem' }}>
+                    <h4 style={{ margin: '0 0 1rem' }}>Gesamtfortschritt</h4>
+                    <div style={{ height: 12, background: 'var(--gray-200)', borderRadius: 6, overflow: 'hidden', display: 'flex' }}>
+                      <div style={{ height: '100%', width: `${(stats.overview.completed / stats.overview.total_apartments) * 100}%`, background: 'var(--success)' }} />
+                      <div style={{ height: '100%', width: `${(stats.overview.in_progress / stats.overview.total_apartments) * 100}%`, background: 'var(--warning)' }} />
+                    </div>
+                    <div style={{ display: 'flex', gap: '1.5rem', marginTop: 8, fontSize: '0.8125rem', color: 'var(--gray-600)' }}>
+                      <span>🟢 {Math.round((stats.overview.completed / stats.overview.total_apartments) * 100)}% Abgeschlossen</span>
+                      <span>🟡 {Math.round((stats.overview.in_progress / stats.overview.total_apartments) * 100)}% In Bearbeitung</span>
+                      <span>⚪ {Math.round((stats.overview.open / stats.overview.total_apartments) * 100)}% Offen</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Auswahl-Verteilung pro Kategorie */}
+                <h4 style={{ margin: '0 0 1rem' }}>Auswahl-Verteilung pro Kategorie</h4>
+                {stats.categories?.length > 0 ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    {stats.categories.map(cat => {
+                      const totalSelections = cat.options.reduce((sum, o) => sum + o.count, 0)
+                      const colors = ['#E30613', '#2563EB', '#059669', '#D97706', '#7C3AED', '#EC4899', '#0891B2', '#65A30D']
+                      return (
+                        <div key={cat.id} style={{ background: 'white', borderRadius: 8, padding: '1.25rem 1.5rem', boxShadow: 'var(--shadow)' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                            <h4 style={{ margin: 0, fontSize: '1rem' }}>{cat.name}</h4>
+                            <span style={{ fontSize: '0.8125rem', color: 'var(--gray-500)' }}>{totalSelections} Auswahlen</span>
+                          </div>
+                          {cat.options.map((opt, oi) => (
+                            <StatBar
+                              key={opt.id + '-' + oi}
+                              label={opt.name}
+                              count={opt.count}
+                              total={totalSelections || 1}
+                              price={opt.price}
+                              isDefault={opt.is_default}
+                              color={colors[oi % colors.length]}
+                            />
+                          ))}
+                          {totalSelections === 0 && <div style={{ padding: '0.5rem 0', color: 'var(--gray-400)', fontSize: '0.875rem' }}>Noch keine Auswahlen</div>}
+                        </div>
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <div className="empty-state"><BarChart3 size={48} style={{ color: 'var(--gray-300)' }} /><div className="empty-state-title">Keine Daten</div></div>
+                )}
+              </>
+            ) : (
+              <div className="empty-state"><BarChart3 size={48} style={{ color: 'var(--gray-300)' }} /><div className="empty-state-title">Statistiken laden...</div></div>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* MODALS */}
+      {/* ========== MODALS ========== */}
+
+      {/* Kategorie Modal - OHNE Reihenfolge-Feld */}
       <Modal isOpen={showCategoryModal} onClose={() => setShowCategoryModal(false)} title={editItem ? 'Kategorie bearbeiten' : 'Neue Kategorie'}>
         <div className="modal-body">
           <div className="form-group"><label className="form-label">Name *</label><input type="text" className="form-input" value={categoryForm.name} onChange={e => setCategoryForm({ ...categoryForm, name: e.target.value })} autoFocus /></div>
           <div className="form-group"><label className="form-label">Beschreibung</label><textarea className="form-textarea" value={categoryForm.description} onChange={e => setCategoryForm({ ...categoryForm, description: e.target.value })} /></div>
-          <div className="form-group"><label className="form-label">Reihenfolge</label><input type="number" className="form-input" value={categoryForm.sort_order} onChange={e => setCategoryForm({ ...categoryForm, sort_order: e.target.value })} min="1" style={{ width: 100 }} /></div>
         </div>
         <div className="modal-footer"><button className="btn btn-outline" onClick={() => setShowCategoryModal(false)}>Abbrechen</button><button className="btn btn-primary" onClick={saveCategory} disabled={!categoryForm.name.trim() || saving}>{saving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />} Speichern</button></div>
       </Modal>
 
+      {/* Option Modal */}
       <Modal isOpen={showOptionModal} onClose={() => setShowOptionModal(false)} title={editItem ? 'Option bearbeiten' : 'Neue Option'} size="modal-lg">
         <div className="modal-body">
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
@@ -805,6 +1095,7 @@ const ProjectDetail = ({ onLogout }) => {
         <div className="modal-footer"><button className="btn btn-outline" onClick={() => setShowOptionModal(false)}>Abbrechen</button><button className="btn btn-primary" onClick={saveOption} disabled={!optionForm.name.trim() || saving}>{saving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />} Speichern</button></div>
       </Modal>
 
+      {/* Wohnung Modal - OHNE E-Mail */}
       <Modal isOpen={showApartmentModal} onClose={() => setShowApartmentModal(false)} title={editItem ? 'Wohnung bearbeiten' : 'Neue Wohnung'}>
         <div className="modal-body">
           {error && <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0.75rem', background: 'var(--error-light)', color: 'var(--error)', borderRadius: 8, marginBottom: '1rem', fontSize: '0.875rem' }}><AlertCircle size={16} />{error}</div>}
@@ -816,30 +1107,31 @@ const ProjectDetail = ({ onLogout }) => {
           </div>
           <div className="gs-accent-line" style={{ margin: '1.5rem 0' }} />
           <div className="form-group"><label className="form-label">Kundenname</label><input type="text" className="form-input" value={apartmentForm.customer_name} onChange={e => setApartmentForm({ ...apartmentForm, customer_name: e.target.value })} /></div>
-          <div className="form-group"><label className="form-label">E-Mail</label><input type="email" className="form-input" value={apartmentForm.customer_email} onChange={e => setApartmentForm({ ...apartmentForm, customer_email: e.target.value })} /></div>
           {editItem && <div className="form-group"><label className="form-label">Zugangscode</label><input type="text" className="form-input" value={editItem.access_code} disabled style={{ background: 'var(--gray-100)', fontFamily: 'monospace' }} /><p className="form-hint">Der Zugangscode kann nicht geändert werden.</p></div>}
         </div>
         <div className="modal-footer"><button className="btn btn-outline" onClick={() => setShowApartmentModal(false)}>Abbrechen</button><button className="btn btn-primary" onClick={saveApartment} disabled={!apartmentForm.name.trim() || saving}>{saving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />} Speichern</button></div>
       </Modal>
 
+      {/* Batch Modal - OHNE E-Mail */}
       <Modal isOpen={showBatchModal} onClose={() => setShowBatchModal(false)} title="Wohnungen Sammelimport" size="modal-lg">
         <div className="modal-body">
           <p style={{ color: 'var(--gray-500)', marginBottom: '1rem' }}>Geben Sie eine Wohnung pro Zeile ein. Felder mit Semikolon trennen:</p>
-          <p style={{ fontFamily: 'monospace', fontSize: '0.8125rem', background: 'var(--gray-100)', padding: '0.75rem', borderRadius: 6, marginBottom: '1rem' }}>Name;Etage;m²;Zimmer;Kundenname;Email</p>
+          <p style={{ fontFamily: 'monospace', fontSize: '0.8125rem', background: 'var(--gray-100)', padding: '0.75rem', borderRadius: 6, marginBottom: '1rem' }}>Name;Etage;m²;Zimmer;Kundenname</p>
           {error && <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0.75rem', background: 'var(--error-light)', color: 'var(--error)', borderRadius: 8, marginBottom: '1rem', fontSize: '0.875rem' }}><AlertCircle size={16} />{error}</div>}
-          <textarea className="form-textarea" value={batchText} onChange={e => setBatchText(e.target.value)} placeholder="Wohnung 1.01;EG;78.5;3;Familie Müller;mueller@email.de" style={{ minHeight: 200, fontFamily: 'monospace', fontSize: '0.875rem' }} />
+          <textarea className="form-textarea" value={batchText} onChange={e => setBatchText(e.target.value)} placeholder="Wohnung 1.01;EG;78.5;3;Familie Müller" style={{ minHeight: 200, fontFamily: 'monospace', fontSize: '0.875rem' }} />
           <p className="form-hint" style={{ marginTop: 8 }}>{batchText.split('\n').filter(l => l.trim()).length} Zeilen erkannt</p>
         </div>
         <div className="modal-footer"><button className="btn btn-outline" onClick={() => setShowBatchModal(false)}>Abbrechen</button><button className="btn btn-primary" onClick={saveBatch} disabled={!batchText.trim() || saving}>{saving ? <Loader2 size={18} className="animate-spin" /> : <Upload size={18} />} Importieren</button></div>
       </Modal>
 
+      {/* Options-Konfiguration Modal */}
       <Modal isOpen={showOptionsConfig} onClose={() => setShowOptionsConfig(false)} title={`Optionen für ${selectedApartment?.name}`} size="modal-lg">
         <div className="modal-body" style={{ maxHeight: '60vh', overflow: 'auto' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
             <p style={{ color: 'var(--gray-500)', margin: 0 }}>Optionen ausblenden oder individuelle hinzufügen.</p>
             <button className="btn btn-primary btn-sm" onClick={openCustomModal}><Plus size={16} /> Individuelle Option</button>
           </div>
-          {categories.sort((a, b) => a.sort_order - b.sort_order).map(cat => {
+          {sortedCategories.map(cat => {
             const catOptions = options.filter(o => o.category_id === cat.id)
             const catCustom = customOptions.filter(o => o.category_id === cat.id)
             if (catOptions.length === 0 && catCustom.length === 0) return null
@@ -881,6 +1173,7 @@ const ProjectDetail = ({ onLogout }) => {
         <div className="modal-footer"><button className="btn btn-primary" onClick={() => setShowOptionsConfig(false)}>Fertig</button></div>
       </Modal>
 
+      {/* Individuelle Option Modal */}
       <Modal isOpen={showCustomModal} onClose={() => setShowCustomModal(false)} title="Individuelle Option hinzufügen">
         <div className="modal-body">
           {error && <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0.75rem', background: 'var(--error-light)', color: 'var(--error)', borderRadius: 8, marginBottom: '1rem', fontSize: '0.875rem' }}><AlertCircle size={16} />{error}</div>}
@@ -901,7 +1194,7 @@ const ProjectDetail = ({ onLogout }) => {
             ) : (
               <select className="form-input" value={customForm.category_id} onChange={e => setCustomForm({ ...customForm, category_id: e.target.value })}>
                 <option value="">-- Kategorie wählen --</option>
-                {categories.sort((a, b) => a.sort_order - b.sort_order).map(cat => (<option key={cat.id} value={cat.id}>{cat.name}</option>))}
+                {sortedCategories.map(cat => (<option key={cat.id} value={cat.id}>{cat.name}</option>))}
               </select>
             )}
           </div>
@@ -930,6 +1223,8 @@ const adminStyles = `
   .project-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 1.5rem; }
   .project-card { background: white; border-radius: 12px; padding: 1.5rem; box-shadow: var(--shadow); cursor: pointer; transition: all 0.2s; border: 2px solid transparent; }
   .project-card:hover { border-color: var(--gs-red); box-shadow: var(--shadow-lg); transform: translateY(-2px); }
+  .project-card-archived { opacity: 0.75; cursor: default; border-style: dashed; border-color: var(--gray-300); }
+  .project-card-archived:hover { border-color: var(--gray-400); transform: none; box-shadow: var(--shadow); }
   .project-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; color: var(--gs-red); min-height: 28px; }
   .project-card-actions { display: flex; gap: 4px; opacity: 0; transition: opacity 0.2s; }
   .project-card:hover .project-card-actions { opacity: 1; }
@@ -960,7 +1255,6 @@ const adminStyles = `
   .category-header { display: flex; justify-content: space-between; align-items: flex-start; padding: 1.25rem 1.5rem; background: var(--gray-50); border-bottom: 1px solid var(--gray-200); }
   .category-header h4 { display: inline; font-size: 1rem; margin: 0; }
   .category-header p { color: var(--gray-500); font-size: 0.875rem; margin-top: 0.25rem; }
-  .category-order { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; background: var(--gs-red); color: white; font-size: 0.75rem; font-weight: 600; border-radius: 50%; margin-right: 0.75rem; }
   .access-code { font-size: 0.875rem !important; padding: 0.375rem 0.75rem !important; }
   .animate-spin { animation: spin 1s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }

@@ -5,19 +5,28 @@
 // DELETE /api/projects?id=X - Projekt löschen
 
 export async function onRequestGet(context) {
-  const { env } = context
+  const { env, request } = context
+  const url = new URL(request.url)
+  const includeArchived = url.searchParams.get('include_archived') === 'true'
 
   try {
-    const result = await env.DB.prepare(`
+    let query = `
       SELECT 
         p.*,
         COUNT(DISTINCT a.id) as apartment_count,
         COUNT(DISTINCT CASE WHEN a.status = 'abgeschlossen' THEN a.id END) as completed_count
       FROM projects p
       LEFT JOIN apartments a ON p.id = a.project_id
+    `
+    if (!includeArchived) {
+      query += ` WHERE p.status != 'archiviert'`
+    }
+    query += `
       GROUP BY p.id
       ORDER BY p.created_at DESC
-    `).all()
+    `
+
+    const result = await env.DB.prepare(query).all()
 
     return Response.json({ projects: result.results })
   } catch (error) {
@@ -95,14 +104,24 @@ export async function onRequestDelete(context) {
   const { request, env } = context
   const url = new URL(request.url)
   const id = url.searchParams.get('id')
+  const permanent = url.searchParams.get('permanent') === 'true'
 
   if (!id) {
     return Response.json({ error: 'ID ist erforderlich' }, { status: 400 })
   }
 
   try {
-    // Lösche auch alle zugehörigen Daten (CASCADE)
-    await env.DB.prepare('DELETE FROM projects WHERE id = ?').bind(parseInt(id)).run()
+    if (permanent) {
+      // Nur aus dem Archiv: endgültig löschen
+      const project = await env.DB.prepare('SELECT status FROM projects WHERE id = ?').bind(parseInt(id)).first()
+      if (!project || project.status !== 'archiviert') {
+        return Response.json({ error: 'Nur archivierte Projekte können endgültig gelöscht werden' }, { status: 400 })
+      }
+      await env.DB.prepare('DELETE FROM projects WHERE id = ?').bind(parseInt(id)).run()
+    } else {
+      // Archivieren statt löschen
+      await env.DB.prepare(`UPDATE projects SET status = 'archiviert', updated_at = CURRENT_TIMESTAMP WHERE id = ?`).bind(parseInt(id)).run()
+    }
 
     return Response.json({ success: true })
   } catch (error) {

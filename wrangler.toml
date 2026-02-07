@@ -24,12 +24,9 @@ compatibility_date = "2024-01-01"
 [[d1_databases]]
 binding = "DB"
 database_name = "bemusterung-db"
-database_id = "e27dbc9f-45b3-4006-8f9f-512395a1fabb"  # Nach 'wrangler d1 create' hier eintragen
+database_id = "DEINE_DATABASE_ID_HIER"  # Nach 'wrangler d1 create' hier eintragen
 
 # R2 Bucket für Bilder
 [[r2_buckets]]
 binding = "IMAGES"
 bucket_name = "bemusterung-images"
-
-
-#test

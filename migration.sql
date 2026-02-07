@@ -9,14 +9,20 @@ ALTER TABLE projects ADD COLUMN project_logo TEXT
 -- 3. Projektbild Spalte  
 ALTER TABLE projects ADD COLUMN project_image TEXT
 
+-- 4. Info-Text für Optionen (i-Button)
+ALTER TABLE options ADD COLUMN info_text TEXT
+
+-- 5. Info-Text für individuelle Optionen
+ALTER TABLE apartment_custom_options ADD COLUMN info_text TEXT
+
 -- Falls selections Tabelle Probleme macht:
--- 4. Alte Daten sichern
+-- 6. Alte Daten sichern
 CREATE TABLE IF NOT EXISTS selections_backup AS SELECT * FROM selections
 
--- 5. Alte Tabelle löschen
+-- 7. Alte Tabelle löschen
 DROP TABLE IF EXISTS selections
 
--- 6. Neue Tabelle OHNE Foreign Key für option_id erstellen
+-- 8. Neue Tabelle OHNE Foreign Key für option_id erstellen
 CREATE TABLE selections (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     apartment_id INTEGER NOT NULL,
@@ -28,13 +34,13 @@ CREATE TABLE selections (
     UNIQUE(apartment_id, category_id)
 )
 
--- 7. Daten wiederherstellen
+-- 9. Daten wiederherstellen
 INSERT INTO selections (apartment_id, category_id, option_id, selected_at) SELECT apartment_id, category_id, option_id, selected_at FROM selections_backup
 
--- 8. Backup löschen
+-- 10. Backup löschen
 DROP TABLE selections_backup
 
--- 9. Hidden Options Tabelle
+-- 11. Hidden Options Tabelle
 CREATE TABLE IF NOT EXISTS apartment_hidden_options (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     apartment_id INTEGER NOT NULL,
@@ -43,13 +49,14 @@ CREATE TABLE IF NOT EXISTS apartment_hidden_options (
     UNIQUE(apartment_id, option_id)
 )
 
--- 10. Custom Options Tabelle
+-- 12. Custom Options Tabelle
 CREATE TABLE IF NOT EXISTS apartment_custom_options (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     apartment_id INTEGER NOT NULL,
     category_id INTEGER NOT NULL,
     name TEXT NOT NULL,
     description TEXT,
+    info_text TEXT,
     price REAL DEFAULT 0,
     image_url TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
