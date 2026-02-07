@@ -174,227 +174,293 @@ function Customer() {
     return imgs
   }
 
+  // Bild als Base64 laden (Helper)
+  const fetchImageBase64 = async (url) => {
+    try {
+      const r = await fetch(url)
+      if (!r.ok) return null
+      const blob = await r.blob()
+      return await new Promise(res => { const rd = new FileReader(); rd.onload = () => res(rd.result); rd.readAsDataURL(blob) })
+    } catch { return null }
+  }
+
   // PDF generieren und herunterladen
   const downloadPDF = async () => {
     try {
-      // Daten für PDF vom Server holen
       const res = await fetch(`/api/pdf?code=${code.toUpperCase()}&format=json`)
       if (!res.ok) throw new Error('Daten konnten nicht geladen werden')
-      const pdfData = await res.json()
+      const d = await res.json()
 
-      // jsPDF dynamisch laden
+      // jsPDF laden
       const loadScript = (src) => new Promise((resolve, reject) => {
         if (document.querySelector(`script[src="${src}"]`)) { resolve(); return }
-        const s = document.createElement('script')
-        s.src = src; s.onload = resolve; s.onerror = reject
-        document.head.appendChild(s)
+        const s = document.createElement('script'); s.src = src; s.onload = resolve; s.onerror = reject; document.head.appendChild(s)
       })
       await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js')
 
       const { jsPDF } = window.jspdf
       const pdf = new jsPDF('p', 'mm', 'a4')
-      const W = pdf.internal.pageSize.getWidth()
-      const H = pdf.internal.pageSize.getHeight()
-      const margin = 15
-      const usable = W - margin * 2
-      let y = margin
+      const W = pdf.internal.pageSize.getWidth()   // 210
+      const H = pdf.internal.pageSize.getHeight()   // 297
+      const M = 14 // Margin
+      const U = W - M * 2 // Usable width
+      let y = M
+      const R = 227, G = 6, B = 19 // G&S Rot
 
-      const checkPage = (needed) => {
-        if (y + needed > H - margin) { pdf.addPage(); y = margin; return true }
-        return false
+      const newPage = () => { pdf.addPage(); y = M }
+      const check = (n) => { if (y + n > H - M) { newPage(); return true } return false }
+      const fmtEuro = (p) => p === 0 ? 'Inklusive' : (p > 0 ? '+' : '') + p.toLocaleString('de-DE') + ' \u20ac'
+
+      // --- Alle Bilder vorladen ---
+      const imgCache = {}
+      const logoB64 = await fetchImageBase64('/logo.jpg')
+      for (const sel of d.selections) {
+        for (const url of (sel.option_images || [])) {
+          if (!imgCache[url]) imgCache[url] = await fetchImageBase64(url)
+        }
       }
 
-      // === Briefkopf ===
-      pdf.setDrawColor(227, 6, 19)
-      pdf.setLineWidth(0.8)
-      pdf.line(margin, y + 18, W - margin, y + 18)
+      // ============================
+      // SEITE 1: HEADER
+      // ============================
 
-      pdf.setFont('helvetica', 'bold')
-      pdf.setFontSize(16)
-      pdf.setTextColor(227, 6, 19)
-      pdf.text('G&S Gruppe', margin, y + 6)
+      // Roter Balken oben
+      pdf.setFillColor(R, G, B)
+      pdf.rect(0, 0, W, 4, 'F')
+      y = 10
+
+      // Logo links
+      if (logoB64) {
+        try { pdf.addImage(logoB64, 'JPEG', M, y, 38, 15) } catch {}
+      }
+      // Firmeninfo rechts
       pdf.setFont('helvetica', 'normal')
-      pdf.setFontSize(9)
-      pdf.setTextColor(100)
-      pdf.text('Felix-Wankel-Stra\u00dfe 29 \u00b7 53881 Euskirchen', margin, y + 12)
+      pdf.setFontSize(8)
+      pdf.setTextColor(130)
+      pdf.text('G&S Gruppe  \u00b7  Felix-Wankel-Stra\u00dfe 29  \u00b7  53881 Euskirchen', W - M, y + 5, { align: 'right' })
+      pdf.text('www.g-s-wohnbau.de', W - M, y + 10, { align: 'right' })
 
-      // Logo rechts (Fallback Text)
-      try {
-        if (pdfData.logoBase64) {
-          pdf.addImage(pdfData.logoBase64, 'JPEG', W - margin - 35, y, 35, 14)
-        } else {
-          pdf.setFontSize(10)
-          pdf.setTextColor(150)
-          pdf.text('G&S', W - margin - 10, y + 8, { align: 'right' })
-        }
-      } catch { /* Logo-Fehler ignorieren */ }
+      y += 22
 
-      y += 26
+      // Trennlinie
+      pdf.setDrawColor(229, 231, 235)
+      pdf.setLineWidth(0.3)
+      pdf.line(M, y, W - M, y)
+      y += 8
 
-      // === Titel ===
+      // Titel
       pdf.setFont('helvetica', 'bold')
-      pdf.setFontSize(20)
-      pdf.setTextColor(30)
-      pdf.text('Bemusterungsprotokoll', W / 2, y, { align: 'center' })
-      y += 7
+      pdf.setFontSize(22)
+      pdf.setTextColor(R, G, B)
+      pdf.text('Bemusterungsprotokoll', M, y)
+      y += 5
       pdf.setFont('helvetica', 'normal')
       pdf.setFontSize(10)
-      pdf.setTextColor(120)
-      pdf.text(`Verbindliche Ausstattungsauswahl vom ${pdfData.date}`, W / 2, y, { align: 'center' })
+      pdf.setTextColor(100)
+      pdf.text(`Verbindliche Ausstattungsauswahl  \u00b7  ${d.date}`, M, y)
       y += 10
 
-      // === Info-Boxen ===
-      const boxW = (usable - 6) / 2
-      const boxH = 22
-      const drawInfoBox = (x, yPos, label, value, sub) => {
-        pdf.setFillColor(249, 250, 251)
+      // Info-Boxen (2x2 Grid)
+      const bW = (U - 5) / 2
+      const bH = 20
+      const box = (x, yy, lbl, val, sub) => {
+        pdf.setFillColor(248, 249, 250)
         pdf.setDrawColor(229, 231, 235)
-        pdf.roundedRect(x, yPos, boxW, boxH, 2, 2, 'FD')
-        pdf.setFontSize(7)
-        pdf.setTextColor(140)
+        pdf.roundedRect(x, yy, bW, bH, 1.5, 1.5, 'FD')
+        // Roter Akzent links
+        pdf.setFillColor(R, G, B)
+        pdf.rect(x, yy + 3, 0.8, bH - 6, 'F')
+        pdf.setFontSize(6.5)
+        pdf.setTextColor(130)
         pdf.setFont('helvetica', 'normal')
-        pdf.text(label.toUpperCase(), x + 5, yPos + 6)
-        pdf.setFontSize(11)
+        pdf.text(lbl.toUpperCase(), x + 5, yy + 5.5)
+        pdf.setFontSize(10.5)
         pdf.setTextColor(30)
         pdf.setFont('helvetica', 'bold')
-        pdf.text(String(value || '-'), x + 5, yPos + 13)
+        const valTxt = String(val || '-')
+        const valLines = pdf.splitTextToSize(valTxt, bW - 10)
+        pdf.text(valLines[0], x + 5, yy + 12)
         if (sub) {
-          pdf.setFontSize(8)
+          pdf.setFontSize(7.5)
           pdf.setTextColor(120)
           pdf.setFont('helvetica', 'normal')
-          pdf.text(String(sub), x + 5, yPos + 19)
+          pdf.text(String(sub), x + 5, yy + 17)
         }
       }
+      box(M, y, 'Projekt', d.project_name, d.project_address || '')
+      const aptSub = [d.floor, d.size_sqm ? d.size_sqm + ' m\u00b2' : '', d.rooms ? d.rooms + ' Zi.' : ''].filter(Boolean).join(' \u00b7 ')
+      box(M + bW + 5, y, 'Wohnung', d.apartment_name, aptSub)
+      y += bH + 4
+      box(M, y, 'Kunde', d.customer_name || '-', '')
+      box(M + bW + 5, y, 'Referenz / Datum', d.access_code, `${d.date}, ${d.time} Uhr`)
+      y += bH + 10
 
-      drawInfoBox(margin, y, 'Projekt', pdfData.project_name, pdfData.project_address || '')
-      const aptSub = [pdfData.floor, pdfData.size_sqm ? pdfData.size_sqm + ' m\u00b2' : '', pdfData.rooms ? pdfData.rooms + ' Zimmer' : ''].filter(Boolean).join(' \u00b7 ')
-      drawInfoBox(margin + boxW + 6, y, 'Wohnung', pdfData.apartment_name, aptSub)
-      y += boxH + 4
-      drawInfoBox(margin, y, 'Kunde', pdfData.customer_name || '-', '')
-      drawInfoBox(margin + boxW + 6, y, 'Referenz', pdfData.access_code, `Abgesendet: ${pdfData.date}, ${pdfData.time} Uhr`)
-      y += boxH + 10
-
-      // === Tabelle ===
+      // ============================
+      // ÜBERSICHTS-TABELLE (kompakt)
+      // ============================
       pdf.setFont('helvetica', 'bold')
-      pdf.setFontSize(12)
+      pdf.setFontSize(11)
       pdf.setTextColor(50)
-      pdf.text('Gew\u00e4hlte Ausstattung', margin, y)
-      y += 7
+      pdf.text('\u00dcbersicht der gew\u00e4hlten Ausstattung', M, y)
+      y += 6
 
       // Tabellenkopf
-      const col1 = margin
-      const col2 = margin + usable * 0.28
-      const col3 = W - margin
-      const rowPad = 4
-
-      pdf.setFillColor(31, 41, 55)
-      pdf.rect(margin, y, usable, 9, 'F')
-      pdf.setFontSize(8.5)
-      pdf.setTextColor(255)
-      pdf.setFont('helvetica', 'bold')
-      pdf.text('Kategorie', col1 + 4, y + 6)
-      pdf.text('Gew\u00e4hlte Option', col2 + 4, y + 6)
-      pdf.text('Mehrpreis', col3 - 4, y + 6, { align: 'right' })
-      y += 9
-
-      // Tabellenzeilen
-      pdf.setFont('helvetica', 'normal')
-      const formatEuro = (p) => p === 0 ? 'Inklusive' : (p > 0 ? '+' : '') + p.toLocaleString('de-DE') + ' \u20ac'
-
-      // Bilder vorladen
-      const imageCache = {}
-      for (const sel of pdfData.selections) {
-        if (sel.option_image) {
-          try {
-            const imgRes = await fetch(sel.option_image)
-            if (imgRes.ok) {
-              const blob = await imgRes.blob()
-              const dataUrl = await new Promise(r => { const rd = new FileReader(); rd.onload = () => r(rd.result); rd.readAsDataURL(blob) })
-              imageCache[sel.option_image] = dataUrl
-            }
-          } catch { /* Bild ignorieren */ }
-        }
-      }
-
-      for (let i = 0; i < pdfData.selections.length; i++) {
-        const sel = pdfData.selections[i]
-        const hasImg = imageCache[sel.option_image]
-        const rowH = hasImg ? 16 : 12
-
-        checkPage(rowH + 2)
-
-        // Zebra-Streifen
-        if (i % 2 === 0) {
-          pdf.setFillColor(249, 250, 251)
-          pdf.rect(margin, y, usable, rowH, 'F')
-        }
-
-        // Trennlinie
-        pdf.setDrawColor(229, 231, 235)
-        pdf.setLineWidth(0.2)
-        pdf.line(margin, y + rowH, W - margin, y + rowH)
-
-        // Kategorie
-        pdf.setFontSize(9)
-        pdf.setTextColor(50)
-        pdf.setFont('helvetica', 'bold')
-        pdf.text(sel.category_name, col1 + 4, y + (hasImg ? 8 : 7))
-
-        // Bild + Optionsname
-        let textX = col2 + 4
-        if (hasImg) {
-          try {
-            pdf.addImage(imageCache[sel.option_image], 'JPEG', col2 + 4, y + 2, 14, 10.5)
-            textX = col2 + 22
-          } catch { /* Bild-Fehler ignorieren */ }
-        }
-
-        pdf.setFont('helvetica', 'normal')
-        pdf.setFontSize(9)
-        pdf.setTextColor(30)
-        const maxTextW = col3 - textX - 30
-        const optLines = pdf.splitTextToSize(sel.option_name, maxTextW)
-        pdf.text(optLines[0], textX, y + (hasImg ? 7 : 7))
-        if (sel.option_description && !hasImg) {
-          pdf.setFontSize(7.5)
-          pdf.setTextColor(130)
-          const descLines = pdf.splitTextToSize(sel.option_description, maxTextW)
-          pdf.text(descLines[0], textX, y + 11)
-        }
-
-        // Preis
-        pdf.setFontSize(9)
-        pdf.setTextColor(50)
-        pdf.setFont('helvetica', 'bold')
-        pdf.text(formatEuro(sel.option_price), col3 - 4, y + (hasImg ? 8 : 7), { align: 'right' })
-
-        y += rowH
-      }
-
-      // Gesamt
-      checkPage(14)
-      pdf.setFillColor(31, 41, 55)
-      pdf.rect(margin, y, usable, 11, 'F')
-      pdf.setFontSize(10)
-      pdf.setTextColor(255)
-      pdf.setFont('helvetica', 'bold')
-      pdf.text('Gesamter Mehrpreis zur Basisausstattung', col1 + 4, y + 7.5)
-      pdf.text(formatEuro(pdfData.total_price), col3 - 4, y + 7.5, { align: 'right' })
-      y += 18
-
-      // === Hinweis ===
-      checkPage(25)
-      pdf.setFillColor(249, 250, 251)
-      pdf.setDrawColor(229, 231, 235)
-      pdf.roundedRect(margin, y, usable, 22, 2, 2, 'FD')
+      pdf.setFillColor(R, G, B)
+      pdf.rect(M, y, U, 7, 'F')
       pdf.setFontSize(7.5)
-      pdf.setTextColor(100)
-      pdf.setFont('helvetica', 'normal')
-      const notice = `Dieses Bemusterungsprotokoll wurde am ${pdfData.date} um ${pdfData.time} Uhr maschinell erstellt und elektronisch \u00fcber das Bemusterungsportal der G&S Gruppe \u00fcbermittelt. Das Dokument ist ohne Unterschrift rechtsg\u00fcltig, da die Auswahl durch den Kunden aktiv und verbindlich im Online-Portal best\u00e4tigt wurde.`
-      const noticeLines = pdf.splitTextToSize(notice, usable - 12)
-      pdf.text(noticeLines, margin + 6, y + 6)
+      pdf.setTextColor(255)
+      pdf.setFont('helvetica', 'bold')
+      pdf.text('Kategorie', M + 4, y + 5)
+      pdf.text('Gew\u00e4hlte Option', M + U * 0.3, y + 5)
+      pdf.text('Mehrpreis', W - M - 4, y + 5, { align: 'right' })
+      y += 7
 
-      pdf.save(`Bemusterungsprotokoll_${pdfData.apartment_name || 'Auswahl'}.pdf`)
+      for (let i = 0; i < d.selections.length; i++) {
+        const s = d.selections[i]
+        check(9)
+        if (i % 2 === 0) { pdf.setFillColor(250, 250, 252); pdf.rect(M, y, U, 8, 'F') }
+        pdf.setDrawColor(235, 235, 240); pdf.setLineWidth(0.15); pdf.line(M, y + 8, W - M, y + 8)
+        pdf.setFontSize(8); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(70)
+        pdf.text(s.category_name, M + 4, y + 5.5)
+        pdf.setFont('helvetica', 'normal'); pdf.setTextColor(50)
+        const optTxt = pdf.splitTextToSize(s.option_name, U * 0.4)
+        pdf.text(optTxt[0], M + U * 0.3, y + 5.5)
+        pdf.setFont('helvetica', 'bold'); pdf.setTextColor(30)
+        pdf.text(fmtEuro(s.option_price), W - M - 4, y + 5.5, { align: 'right' })
+        y += 8
+      }
+
+      // Gesamtzeile
+      check(12)
+      pdf.setFillColor(R, G, B)
+      pdf.rect(M, y, U, 10, 'F')
+      pdf.setFontSize(9.5); pdf.setTextColor(255); pdf.setFont('helvetica', 'bold')
+      pdf.text('Gesamter Mehrpreis', M + 4, y + 7)
+      pdf.setFontSize(11)
+      pdf.text(fmtEuro(d.total_price), W - M - 4, y + 7, { align: 'right' })
+      y += 16
+
+      // ============================
+      // DETAIL-KARTEN pro Auswahl
+      // ============================
+      check(10)
+      pdf.setFont('helvetica', 'bold')
+      pdf.setFontSize(11)
+      pdf.setTextColor(50)
+      pdf.text('Detailansicht der Auswahl', M, y)
+      y += 7
+
+      for (const sel of d.selections) {
+        const imgs = (sel.option_images || []).map(u => imgCache[u]).filter(Boolean)
+        const desc = sel.option_description || ''
+        const info = sel.option_info_text || ''
+        const hasText = desc || info
+
+        // H\u00f6he sch\u00e4tzen
+        let cardH = 14 // Header + Padding
+        if (hasText) {
+          pdf.setFontSize(8)
+          const allText = [desc, info].filter(Boolean).join('\n')
+          const lines = pdf.splitTextToSize(allText, imgs.length > 0 ? U - 42 : U - 10)
+          cardH += Math.min(lines.length, 12) * 3.2 + 4
+        }
+        if (imgs.length > 0) {
+          const imgRowH = imgs.length <= 3 ? 26 : 26
+          if (!hasText) cardH += imgRowH + 4
+          else cardH = Math.max(cardH, 14 + imgRowH + 4)
+        }
+        cardH = Math.max(cardH, 18)
+
+        check(cardH + 4)
+
+        // Karten-Hintergrund
+        pdf.setFillColor(255, 255, 255)
+        pdf.setDrawColor(225, 228, 232)
+        pdf.setLineWidth(0.3)
+        pdf.roundedRect(M, y, U, cardH, 2, 2, 'FD')
+
+        // Roter Top-Balken
+        pdf.setFillColor(R, G, B)
+        pdf.rect(M, y, U, 0.6, 'F')
+
+        // Kategorie-Label + Preis Header
+        const hY = y + 5.5
+        pdf.setFontSize(6.5); pdf.setTextColor(R, G, B); pdf.setFont('helvetica', 'bold')
+        pdf.text(sel.category_name.toUpperCase(), M + 5, hY)
+        pdf.setFontSize(10); pdf.setTextColor(30); pdf.setFont('helvetica', 'bold')
+        pdf.text(fmtEuro(sel.option_price), W - M - 5, hY, { align: 'right' })
+
+        // Optionsname
+        pdf.setFontSize(11); pdf.setTextColor(20); pdf.setFont('helvetica', 'bold')
+        const nameLines = pdf.splitTextToSize(sel.option_name, U - 50)
+        pdf.text(nameLines[0], M + 5, hY + 6)
+        let contentY = hY + 10
+
+        // Bilder (rechts oder unten, je nach Anzahl)
+        let textW = U - 10
+        if (imgs.length > 0) {
+          const imgSize = 18
+          const gap = 2.5
+          const maxPerRow = Math.min(imgs.length, 3)
+          const imgsW = maxPerRow * imgSize + (maxPerRow - 1) * gap
+          const imgX = W - M - 5 - imgsW
+          const imgY = contentY - 2
+          textW = imgX - M - 8
+
+          for (let i = 0; i < Math.min(imgs.length, 6); i++) {
+            const row = Math.floor(i / 3)
+            const col = i % 3
+            try {
+              pdf.addImage(imgs[i], 'JPEG', imgX + col * (imgSize + gap), imgY + row * (imgSize + gap), imgSize, imgSize)
+            } catch {}
+          }
+        }
+
+        // Beschreibung
+        if (desc) {
+          pdf.setFontSize(8); pdf.setTextColor(60); pdf.setFont('helvetica', 'normal')
+          const descLines = pdf.splitTextToSize(desc, textW)
+          pdf.text(descLines.slice(0, 4), M + 5, contentY)
+          contentY += Math.min(descLines.length, 4) * 3.2 + 2
+        }
+
+        // Info-Text (Langbeschreibung)
+        if (info) {
+          pdf.setFontSize(7.5); pdf.setTextColor(100); pdf.setFont('helvetica', 'italic')
+          const infoLines = pdf.splitTextToSize(info, textW)
+          pdf.text(infoLines.slice(0, 8), M + 5, contentY)
+        }
+
+        y += cardH + 3
+      }
+
+      // ============================
+      // RECHTSHINWEIS
+      // ============================
+      check(24)
+      y += 4
+      pdf.setDrawColor(229, 231, 235); pdf.setLineWidth(0.3); pdf.line(M, y, W - M, y)
+      y += 5
+      pdf.setFontSize(7); pdf.setTextColor(140); pdf.setFont('helvetica', 'normal')
+      const notice = `Dieses Bemusterungsprotokoll wurde am ${d.date} um ${d.time} Uhr maschinell erstellt und elektronisch \u00fcber das Bemusterungsportal der G&S Gruppe \u00fcbermittelt. Das Dokument ist ohne Unterschrift rechtsg\u00fcltig, da die Auswahl durch den Kunden aktiv und verbindlich im Online-Portal best\u00e4tigt wurde.`
+      const nLines = pdf.splitTextToSize(notice, U)
+      pdf.text(nLines, M, y)
+      y += nLines.length * 2.8 + 3
+      pdf.setFontSize(6.5); pdf.setTextColor(180)
+      pdf.text(`Ref: ${d.access_code}  \u00b7  G&S Gruppe  \u00b7  Seite 1/${pdf.internal.getNumberOfPages()}`, W / 2, y, { align: 'center' })
+
+      // Seitenzahlen auf allen Seiten
+      const totalPages = pdf.internal.getNumberOfPages()
+      for (let p = 1; p <= totalPages; p++) {
+        pdf.setPage(p)
+        pdf.setFontSize(6.5); pdf.setTextColor(180); pdf.setFont('helvetica', 'normal')
+        pdf.text(`Seite ${p} von ${totalPages}`, W / 2, H - 6, { align: 'center' })
+        // Roter Balken unten
+        pdf.setFillColor(R, G, B)
+        pdf.rect(0, H - 3, W, 3, 'F')
+      }
+
+      pdf.save(`Bemusterungsprotokoll_${d.apartment_name || 'Auswahl'}.pdf`)
       return true
     } catch (err) {
       console.error('PDF-Generierung fehlgeschlagen:', err)
