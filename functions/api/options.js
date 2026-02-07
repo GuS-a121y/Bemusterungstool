@@ -37,7 +37,28 @@ export async function onRequestGet(context) {
 
     const result = await env.DB.prepare(query).bind(...params).all()
 
-    return Response.json({ options: result.results })
+    // Zusätzliche Bilder für alle Optionen laden
+    const optionIds = result.results.map(o => o.id)
+    let allImages = []
+    if (optionIds.length > 0) {
+      try {
+        const imgResult = await env.DB.prepare(`
+          SELECT * FROM option_images WHERE option_id IN (${optionIds.join(',')}) ORDER BY sort_order ASC
+        `).all()
+        allImages = imgResult.results || []
+      } catch (e) {
+        // Tabelle existiert möglicherweise noch nicht
+        console.warn('option_images table may not exist yet:', e.message)
+      }
+    }
+
+    // Bilder den Optionen zuordnen
+    const optionsWithImages = result.results.map(opt => ({
+      ...opt,
+      additional_images: allImages.filter(img => img.option_id === opt.id)
+    }))
+
+    return Response.json({ options: optionsWithImages })
   } catch (error) {
     console.error('DB Error:', error)
     return Response.json({ error: 'Datenbankfehler' }, { status: 500 })

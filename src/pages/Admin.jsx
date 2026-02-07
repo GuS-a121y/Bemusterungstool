@@ -569,6 +569,7 @@ const ProjectDetail = ({ onLogout }) => {
   // Forms
   const [categoryForm, setCategoryForm] = useState({ name: '', description: '' })
   const [optionForm, setOptionForm] = useState({ name: '', description: '', info_text: '', price: '0', is_default: 0, image_url: '' })
+  const [additionalImages, setAdditionalImages] = useState([])
   const [apartmentForm, setApartmentForm] = useState({ name: '', floor: '', size_sqm: '', rooms: '', customer_name: '' })
   const [customForm, setCustomForm] = useState({ category_id: '', new_category_name: '', use_new_category: false, name: '', description: '', info_text: '', price: '0', image_url: '' })
   const [batchText, setBatchText] = useState('')
@@ -648,13 +649,24 @@ const ProjectDetail = ({ onLogout }) => {
   }
 
   // Option
-  const openOptionModal = (catId, opt = null) => {
+  const openOptionModal = async (catId, opt = null) => {
     setSelectedCategory(catId)
     setEditItem(opt)
     setOptionForm(opt ? { 
       name: opt.name, description: opt.description || '', info_text: opt.info_text || '',
       price: opt.price.toString(), is_default: opt.is_default, image_url: opt.image_url || '' 
     } : { name: '', description: '', info_text: '', price: '0', is_default: 0, image_url: '' })
+    // Zusätzliche Bilder laden
+    if (opt?.additional_images) {
+      setAdditionalImages(opt.additional_images)
+    } else if (opt?.id) {
+      try {
+        const res = await api.get(`/option-images?option_id=${opt.id}`)
+        setAdditionalImages(res.images || [])
+      } catch { setAdditionalImages([]) }
+    } else {
+      setAdditionalImages([])
+    }
     setShowOptionModal(true)
   }
 
@@ -663,8 +675,21 @@ const ProjectDetail = ({ onLogout }) => {
     setSaving(true)
     try {
       const data = { ...optionForm, price: parseFloat(optionForm.price) || 0, is_default: optionForm.is_default ? 1 : 0 }
-      if (editItem) await api.put('/options', { id: editItem.id, category_id: selectedCategory, ...data, sort_order: editItem.sort_order || 0 })
-      else await api.post('/options', { category_id: selectedCategory, ...data })
+      let newOptionId = null
+      if (editItem) {
+        await api.put('/options', { id: editItem.id, category_id: selectedCategory, ...data, sort_order: editItem.sort_order || 0 })
+      } else {
+        const res = await api.post('/options', { category_id: selectedCategory, ...data })
+        newOptionId = res.id
+      }
+      // Zusätzliche Bilder für neue Optionen speichern
+      if (newOptionId && additionalImages.length > 0) {
+        for (const img of additionalImages) {
+          if (!img.id) { // Nur die noch nicht gespeicherten
+            try { await api.post('/option-images', { option_id: newOptionId, image_url: img.image_url }) } catch {}
+          }
+        }
+      }
       setShowOptionModal(false)
       loadData()
     } catch (err) { alert(err.message) }
@@ -905,7 +930,14 @@ const ProjectDetail = ({ onLogout }) => {
                               <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '0.75rem 1rem', background: 'white', borderRadius: 6, border: '1px solid var(--gray-200)', marginBottom: 4 }}>
                                 <GripVertical size={16} style={{ color: 'var(--gray-400)', cursor: 'grab', flexShrink: 0 }} />
                                 {opt.image_url ? (
-                                  <img src={opt.image_url} alt="" style={{ width: 56, height: 42, objectFit: 'cover', borderRadius: 4, flexShrink: 0 }} />
+                                  <div style={{ position: 'relative', flexShrink: 0 }}>
+                                    <img src={opt.image_url} alt="" style={{ width: 56, height: 42, objectFit: 'cover', borderRadius: 4 }} />
+                                    {opt.additional_images?.length > 0 && (
+                                      <span style={{ position: 'absolute', top: -4, right: -4, background: 'var(--gs-red)', color: 'white', borderRadius: 99, padding: '0 5px', fontSize: '0.625rem', fontWeight: 700, lineHeight: '16px' }}>
+                                        +{opt.additional_images.length}
+                                      </span>
+                                    )}
+                                  </div>
                                 ) : (
                                   <div style={{ width: 56, height: 42, background: 'var(--gray-100)', borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Image size={18} color="var(--gray-300)" /></div>
                                 )}
@@ -1089,10 +1121,64 @@ const ProjectDetail = ({ onLogout }) => {
                 <div className="form-group"><label className="form-label">&nbsp;</label><label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', marginTop: 8 }}><input type="checkbox" checked={optionForm.is_default === 1} onChange={e => setOptionForm({ ...optionForm, is_default: e.target.checked ? 1 : 0 })} style={{ width: 18, height: 18 }} /><span>Standard</span></label></div>
               </div>
             </div>
-            <div><div className="form-group"><label className="form-label">Bild</label><ImageUpload value={optionForm.image_url} onChange={url => setOptionForm({ ...optionForm, image_url: url })} /></div></div>
+            <div>
+              <div className="form-group">
+                <label className="form-label">Hauptbild</label>
+                <ImageUpload value={optionForm.image_url} onChange={url => setOptionForm({ ...optionForm, image_url: url })} />
+              </div>
+              {/* Zusätzliche Bilder */}
+              <div className="form-group">
+                <label className="form-label">Weitere Bilder {additionalImages.length > 0 && <span style={{ color: 'var(--gray-400)', fontWeight: 400 }}>({additionalImages.length})</span>}</label>
+                {additionalImages.length > 0 && (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 8 }}>
+                    {additionalImages.map((img, i) => (
+                      <div key={img.id || i} style={{ position: 'relative', borderRadius: 6, overflow: 'hidden', border: '1px solid var(--gray-200)' }}>
+                        <img src={img.image_url} alt="" style={{ width: '100%', height: 60, objectFit: 'cover' }} />
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            if (img.id) {
+                              try { await api.delete(`/option-images?id=${img.id}`) } catch {}
+                            }
+                            setAdditionalImages(prev => prev.filter((_, idx) => idx !== i))
+                          }}
+                          style={{ position: 'absolute', top: 2, right: 2, width: 20, height: 20, background: 'rgba(0,0,0,0.6)', border: 'none', borderRadius: 4, color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}
+                        ><X size={12} /></button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <ImageUpload
+                  value=""
+                  onChange={async (url) => {
+                    if (!url) return
+                    if (editItem?.id) {
+                      // Direkt in DB speichern
+                      try {
+                        const res = await api.post('/option-images', { option_id: editItem.id, image_url: url })
+                        setAdditionalImages(prev => [...prev, { id: res.id, image_url: url, option_id: editItem.id }])
+                      } catch { alert('Fehler beim Speichern') }
+                    } else {
+                      // Noch nicht gespeichert – nur lokal merken
+                      setAdditionalImages(prev => [...prev, { image_url: url }])
+                    }
+                  }}
+                  label="Weiteres Bild hinzufügen"
+                  height={60}
+                />
+                <p className="form-hint">Bilder werden als Slider auf der Karte und als Galerie im Popup angezeigt.</p>
+              </div>
+            </div>
           </div>
         </div>
-        <div className="modal-footer"><button className="btn btn-outline" onClick={() => setShowOptionModal(false)}>Abbrechen</button><button className="btn btn-primary" onClick={saveOption} disabled={!optionForm.name.trim() || saving}>{saving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />} Speichern</button></div>
+        <div className="modal-footer">
+          <button className="btn btn-outline" onClick={() => setShowOptionModal(false)}>Abbrechen</button>
+          <button className="btn btn-primary" onClick={async () => {
+            await saveOption()
+            // Wenn neue Option: zusätzliche Bilder nachträglich speichern
+            // (bei bestehenden Optionen werden sie direkt gespeichert)
+          }} disabled={!optionForm.name.trim() || saving}>{saving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />} Speichern</button>
+        </div>
       </Modal>
 
       {/* Wohnung Modal - OHNE E-Mail */}

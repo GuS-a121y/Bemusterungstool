@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ChevronLeft, ChevronRight, Check, Home, AlertCircle, CheckCircle2, Loader2, FileText, ArrowRight, Info, X, ZoomIn, Save } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Check, Home, AlertCircle, CheckCircle2, Loader2, FileText, ArrowRight, Info, X, ZoomIn, Save, Download } from 'lucide-react'
 
 // Footer Komponente
 const Footer = () => (
@@ -34,15 +34,111 @@ const InfoModal = ({ isOpen, onClose, title, content }) => {
   )
 }
 
-// Bild Modal
-const ImageModal = ({ isOpen, onClose, src, alt }) => {
-  if (!isOpen || !src) return null
+// Galerie Modal (Raster-Ansicht aller Bilder)
+const GalleryModal = ({ isOpen, onClose, images, title }) => {
+  const [selectedIdx, setSelectedIdx] = useState(0)
+  if (!isOpen || !images || images.length === 0) return null
+
   return (
     <div className="modal-overlay image-modal-overlay" onClick={onClose}>
-      <div className="image-modal" onClick={e => e.stopPropagation()}>
-        <button className="image-modal-close" onClick={onClose}><X size={24} /></button>
-        <img src={src} alt={alt} />
+      <div className="gallery-modal" onClick={e => e.stopPropagation()}>
+        <button className="gallery-modal-close" onClick={onClose}><X size={24} /></button>
+        <h3 style={{ margin: '0 0 1rem', color: 'white', fontSize: '1.125rem' }}>{title}</h3>
+        {/* Großes Bild */}
+        <div className="gallery-main">
+          <img src={images[selectedIdx]} alt={`${title} ${selectedIdx + 1}`} />
+          {images.length > 1 && (
+            <>
+              <button className="gallery-nav gallery-nav-left" onClick={() => setSelectedIdx(i => (i - 1 + images.length) % images.length)}><ChevronLeft size={24} /></button>
+              <button className="gallery-nav gallery-nav-right" onClick={() => setSelectedIdx(i => (i + 1) % images.length)}><ChevronRight size={24} /></button>
+            </>
+          )}
+        </div>
+        {/* Thumbnail-Raster */}
+        {images.length > 1 && (
+          <div className="gallery-thumbs">
+            {images.map((img, i) => (
+              <img
+                key={i}
+                src={img}
+                alt={`${title} ${i + 1}`}
+                className={`gallery-thumb ${i === selectedIdx ? 'active' : ''}`}
+                onClick={() => setSelectedIdx(i)}
+              />
+            ))}
+          </div>
+        )}
+        <div style={{ textAlign: 'center', color: 'rgba(255,255,255,0.6)', fontSize: '0.8125rem', marginTop: 8 }}>
+          {selectedIdx + 1} / {images.length}
+        </div>
       </div>
+    </div>
+  )
+}
+
+// Auto-Slider für Optionskarten
+const ImageSlider = ({ images, onOpen, height = 160 }) => {
+  const [current, setCurrent] = useState(0)
+  const intervalRef = useRef(null)
+
+  useEffect(() => {
+    if (images.length <= 1) return
+    intervalRef.current = setInterval(() => {
+      setCurrent(c => (c + 1) % images.length)
+    }, 3000)
+    return () => clearInterval(intervalRef.current)
+  }, [images.length])
+
+  const handleMouseEnter = () => { if (intervalRef.current) clearInterval(intervalRef.current) }
+  const handleMouseLeave = () => {
+    if (images.length <= 1) return
+    intervalRef.current = setInterval(() => {
+      setCurrent(c => (c + 1) % images.length)
+    }, 3000)
+  }
+
+  if (images.length === 0) {
+    return <div className="option-image option-image-placeholder" style={{ height }}><span>Kein Bild</span></div>
+  }
+
+  return (
+    <div
+      className="option-image-wrapper"
+      style={{ position: 'relative', height, overflow: 'hidden' }}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+    >
+      {images.map((img, i) => (
+        <img
+          key={i}
+          src={img}
+          alt=""
+          className="option-image"
+          style={{
+            position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
+            objectFit: 'cover', opacity: i === current ? 1 : 0,
+            transition: 'opacity 0.5s ease'
+          }}
+        />
+      ))}
+      {/* Dots */}
+      {images.length > 1 && (
+        <div style={{ position: 'absolute', bottom: 8, left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: 5, zIndex: 2 }}>
+          {images.map((_, i) => (
+            <button
+              key={i}
+              onClick={e => { e.stopPropagation(); setCurrent(i) }}
+              style={{ width: 8, height: 8, borderRadius: '50%', border: 'none', cursor: 'pointer', background: i === current ? 'white' : 'rgba(255,255,255,0.5)', transition: 'background 0.2s', padding: 0 }}
+            />
+          ))}
+        </div>
+      )}
+      <button
+        className="option-zoom-btn"
+        onClick={e => { e.stopPropagation(); onOpen() }}
+      >
+        <ZoomIn size={16} />
+      </button>
     </div>
   )
 }
@@ -55,16 +151,47 @@ function Customer() {
   const [error, setError] = useState(null)
   const [apartment, setApartment] = useState(null)
   const [categories, setCategories] = useState([])
-  const [currentStep, setCurrentStep] = useState(-1) // -1 = Einleitungsseite
+  const [currentStep, setCurrentStep] = useState(-1)
   const [selections, setSelections] = useState({})
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isSavingDraft, setIsSavingDraft] = useState(false)
   const [isCompleted, setIsCompleted] = useState(false)
   const [draftSaved, setDraftSaved] = useState(false)
+  const [downloadFailed, setDownloadFailed] = useState(false)
   
   // Modal States
   const [infoModal, setInfoModal] = useState({ open: false, title: '', content: '' })
-  const [imageModal, setImageModal] = useState({ open: false, src: '', alt: '' })
+  const [galleryModal, setGalleryModal] = useState({ open: false, images: [], title: '' })
+
+  // Alle Bilder für eine Option sammeln (Hauptbild + zusätzliche)
+  const getAllImages = (option) => {
+    const imgs = []
+    if (option.image_url) imgs.push(option.image_url)
+    if (option.additional_images && option.additional_images.length > 0) {
+      option.additional_images.forEach(img => imgs.push(img.image_url))
+    }
+    return imgs
+  }
+
+  // PDF als Blob herunterladen
+  const downloadPDF = async () => {
+    try {
+      const res = await fetch(`/api/pdf?code=${code.toUpperCase()}`)
+      if (!res.ok) throw new Error('Download fehlgeschlagen')
+      const blob = await res.blob()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `Bemusterungsprotokoll_${apartment?.name || 'Auswahl'}.html`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      window.URL.revokeObjectURL(url)
+      return true
+    } catch {
+      return false
+    }
+  }
 
   // Daten von API laden
   useEffect(() => {
@@ -82,22 +209,17 @@ function Customer() {
         setApartment(data.apartment)
         setCategories(data.categories || [])
 
-        // Bereits abgeschlossen?
         if (data.apartment.status === 'abgeschlossen') {
           setSelections(data.selections || {})
           setIsCompleted(true)
-          setCurrentStep(data.categories.length) // Zeige Übersicht
+          setCurrentStep(data.categories.length)
           setLoading(false)
           return
         }
 
-        // Vorauswahl: bestehende Auswahl oder Standardoptionen
         const defaultSelections = {}
-        
-        // Erst bestehende Auswahl laden
         if (data.selections) {
           Object.entries(data.selections).forEach(([catId, optId]) => {
-            // Negative IDs sind custom options
             if (optId < 0) {
               defaultSelections[catId] = `custom_${Math.abs(optId)}`
             } else {
@@ -105,8 +227,6 @@ function Customer() {
             }
           })
         }
-        
-        // Dann für fehlende Kategorien Defaults setzen
         data.categories.forEach(cat => {
           if (!defaultSelections[cat.id]) {
             const defaultOpt = cat.options.find(o => o.is_default) || cat.options[0]
@@ -116,18 +236,15 @@ function Customer() {
         
         setSelections(defaultSelections)
         setLoading(false)
-
       } catch (err) {
         console.error('Fehler:', err)
         setError('Fehler beim Laden der Daten. Bitte versuchen Sie es später erneut.')
         setLoading(false)
       }
     }
-    
     loadData()
   }, [code])
 
-  // Gesamtpreis berechnen
   const calculateTotal = () => {
     let total = 0
     Object.entries(selections).forEach(([catId, optionId]) => {
@@ -138,44 +255,30 @@ function Customer() {
     return total
   }
 
-  // Option auswählen
   const handleSelect = (categoryId, optionId) => {
     setSelections(prev => ({ ...prev, [categoryId]: optionId }))
     setDraftSaved(false)
   }
 
-  // Navigation
   const nextStep = () => { if (currentStep < categories.length) setCurrentStep(prev => prev + 1) }
   const prevStep = () => { if (currentStep > 0) setCurrentStep(prev => prev - 1) }
   const startBemusterung = () => setCurrentStep(0)
 
-  // Zwischenspeichern
   const handleSaveDraft = async () => {
     setIsSavingDraft(true)
-    
     try {
       const res = await fetch(`/api/customer/${code.toUpperCase()}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ selections, draft: true })
       })
-      
-      if (res.ok) {
-        setDraftSaved(true)
-        setTimeout(() => setDraftSaved(false), 3000)
-      } else {
-        const data = await res.json()
-        alert(data.error || 'Fehler beim Speichern')
-      }
-    } catch (err) {
-      console.error('Fehler:', err)
-      alert('Fehler beim Speichern. Bitte versuchen Sie es erneut.')
-    } finally {
-      setIsSavingDraft(false)
-    }
+      if (res.ok) { setDraftSaved(true); setTimeout(() => setDraftSaved(false), 3000) }
+      else { const data = await res.json(); alert(data.error || 'Fehler beim Speichern') }
+    } catch (err) { alert('Fehler beim Speichern. Bitte versuchen Sie es erneut.') }
+    finally { setIsSavingDraft(false) }
   }
 
-  // Final absenden
+  // Final absenden mit Auto-Download
   const handleSubmit = async () => {
     if (!confirm('Möchten Sie Ihre Auswahl verbindlich abschicken? Eine nachträgliche Änderung ist nicht möglich.')) return
 
@@ -190,7 +293,11 @@ function Customer() {
       
       if (res.ok) {
         setIsCompleted(true)
-        window.open(`/api/pdf?code=${code.toUpperCase()}`, '_blank')
+        // Auto-Download des PDF starten
+        const downloaded = await downloadPDF()
+        if (!downloaded) {
+          setDownloadFailed(true)
+        }
       } else {
         const data = await res.json()
         alert(data.error || 'Fehler beim Speichern')
@@ -203,21 +310,16 @@ function Customer() {
     }
   }
 
-  // Preis formatieren
   const formatPrice = (price) => {
     if (price === 0) return 'Inklusive'
     if (price > 0) return `+${price.toLocaleString('de-DE')} €`
     return `${price.toLocaleString('de-DE')} €`
   }
 
-  // Info Modal öffnen
-  const openInfoModal = (title, content) => {
-    setInfoModal({ open: true, title, content })
-  }
-
-  // Bild Modal öffnen
-  const openImageModal = (src, alt) => {
-    setImageModal({ open: true, src, alt })
+  const openInfoModal = (title, content) => { setInfoModal({ open: true, title, content }) }
+  const openGallery = (option) => {
+    const imgs = getAllImages(option)
+    if (imgs.length > 0) setGalleryModal({ open: true, images: imgs, title: option.name })
   }
 
   // Loading
@@ -272,10 +374,11 @@ function Customer() {
               <CheckCircle2 size={40} color="var(--success)" />
             </div>
             <h2 style={{ marginBottom: '0.5rem' }}>Bemusterung erfolgreich abgeschlossen!</h2>
-            <p style={{ color: 'var(--gray-500)', maxWidth: 450, margin: '0 auto 2rem' }}>
-              Vielen Dank! Ihre Auswahl wurde verbindlich übermittelt. 
-              Ein Protokoll wurde automatisch in einem neuen Tab geöffnet - 
-              bitte speichern Sie dieses als PDF für Ihre Unterlagen.
+            <p style={{ color: 'var(--gray-500)', maxWidth: 500, margin: '0 auto 1.5rem' }}>
+              Vielen Dank! Ihre Auswahl wurde verbindlich übermittelt.
+              {downloadFailed
+                ? ' Der automatische Download konnte nicht gestartet werden. Bitte laden Sie das Protokoll manuell herunter.'
+                : ' Ihr Bemusterungsprotokoll wurde automatisch heruntergeladen.'}
             </p>
             
             {categories.length > 0 && (
@@ -300,8 +403,13 @@ function Customer() {
               </div>
             )}
 
-            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
-              <button className="btn btn-primary" onClick={() => window.open(`/api/pdf?code=${code.toUpperCase()}`, '_blank')}><FileText size={18} /> PDF herunterladen</button>
+            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', flexWrap: 'wrap' }}>
+              <button className="btn btn-primary" onClick={async () => { const ok = await downloadPDF(); if (!ok) window.open(`/api/pdf?code=${code.toUpperCase()}`, '_blank') }}>
+                <Download size={18} /> Protokoll herunterladen
+              </button>
+              <button className="btn btn-outline" onClick={() => window.open(`/api/pdf?code=${code.toUpperCase()}`, '_blank')}>
+                <FileText size={18} /> Im Browser öffnen
+              </button>
               <button className="btn btn-outline" onClick={() => navigate('/')}><Home size={18} /> Zur Startseite</button>
             </div>
           </div>
@@ -331,30 +439,23 @@ Nehmen Sie sich Zeit für Ihre Auswahl. Sie können Ihren Fortschritt jederzeit 
             )}
           </div>
         </header>
-
         <div className="intro-container">
           {apartment?.project?.image && (
-            <div className="intro-image">
-              <img src={apartment.project.image} alt={apartment.project.name} />
-            </div>
+            <div className="intro-image"><img src={apartment.project.image} alt={apartment.project.name} /></div>
           )}
-          
           <div className="intro-content">
             <div className="intro-badge">Digitale Bemusterung</div>
             <h1>{apartment?.project?.name}</h1>
             {apartment?.project?.address && <p className="intro-address">{apartment.project.address}</p>}
-            
             <div className="intro-welcome">
               <p>Willkommen, <strong>{apartment?.customer_name || 'Kunde'}</strong>!</p>
               <p className="intro-apartment">Wohnung: <strong>{apartment?.name}</strong></p>
             </div>
-
             <div className="intro-text">
               {(apartment?.project?.intro_text || defaultIntroText).split('\n').map((line, i) => (
                 <p key={i}>{line}</p>
               ))}
             </div>
-
             <button className="btn btn-primary btn-lg" onClick={startBemusterung}>
               Bemusterung starten <ArrowRight size={20} />
             </button>
@@ -443,33 +544,29 @@ Nehmen Sie sich Zeit für Ihre Auswahl. Sie können Ihren Fortschritt jederzeit 
               <div className="option-grid">
                 {currentCategory?.options.map(option => {
                   const isSelected = selections[currentCategory.id] === option.id || selections[currentCategory.id] === `custom_${option.custom_id}`
+                  const allImgs = getAllImages(option)
                   return (
                     <div
                       key={option.id}
                       className={`option-card ${isSelected ? 'selected' : ''}`}
                       onClick={() => handleSelect(currentCategory.id, option.id)}
                     >
-                      {option.image_url ? (
-                        <div className="option-image-wrapper">
-                          <img src={option.image_url} alt={option.name} className="option-image" />
-                          <button 
-                            className="option-zoom-btn" 
-                            onClick={(e) => { e.stopPropagation(); openImageModal(option.image_url, option.name) }}
-                          >
-                            <ZoomIn size={16} />
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="option-image option-image-placeholder">
-                          <span>Kein Bild</span>
-                        </div>
-                      )}
+                      <ImageSlider
+                        images={allImgs}
+                        onOpen={() => openGallery(option)}
+                        height={160}
+                      />
                       <div className="option-content">
                         <div className="option-name">
                           {option.name}
+                          {allImgs.length > 1 && (
+                            <span style={{ fontSize: '0.6875rem', color: 'var(--gray-400)', fontWeight: 400 }}>
+                              {allImgs.length} Bilder
+                            </span>
+                          )}
                           {option.info_text && (
-                            <button 
-                              className="option-info-btn" 
+                            <button
+                              className="option-info-btn"
                               onClick={(e) => { e.stopPropagation(); openInfoModal(option.name, option.info_text) }}
                             >
                               <Info size={16} />
@@ -497,9 +594,9 @@ Nehmen Sie sich Zeit für Ihre Auswahl. Sie können Ihren Fortschritt jederzeit 
               <div className="wizard-total-label">Aktueller Mehrpreis</div>
               <div className="wizard-total-value">{calculateTotal() >= 0 ? '+' : ''}{calculateTotal().toLocaleString('de-DE')} €</div>
             </div>
-            <button 
-              className={`btn btn-outline btn-save-draft ${draftSaved ? 'saved' : ''}`} 
-              onClick={handleSaveDraft} 
+            <button
+              className={`btn btn-outline btn-save-draft ${draftSaved ? 'saved' : ''}`}
+              onClick={handleSaveDraft}
               disabled={isSavingDraft}
             >
               {isSavingDraft ? <Loader2 size={16} className="animate-spin" /> : draftSaved ? <Check size={16} /> : <Save size={16} />}
@@ -520,17 +617,17 @@ Nehmen Sie sich Zeit für Ihre Auswahl. Sie können Ihren Fortschritt jederzeit 
       </div>
       
       {/* Modals */}
-      <InfoModal 
-        isOpen={infoModal.open} 
+      <InfoModal
+        isOpen={infoModal.open}
         onClose={() => setInfoModal({ ...infoModal, open: false })}
         title={infoModal.title}
         content={infoModal.content}
       />
-      <ImageModal
-        isOpen={imageModal.open}
-        onClose={() => setImageModal({ ...imageModal, open: false })}
-        src={imageModal.src}
-        alt={imageModal.alt}
+      <GalleryModal
+        isOpen={galleryModal.open}
+        onClose={() => setGalleryModal({ ...galleryModal, open: false })}
+        images={galleryModal.images}
+        title={galleryModal.title}
       />
       
       <Footer />
@@ -550,7 +647,6 @@ const wizardStyles = `
   .wizard-error h2 { margin: 1rem 0 0.5rem; }
   .wizard-error svg { color: var(--error); }
   
-  /* Intro Page */
   .intro-container { max-width: 800px; margin: 0 auto; padding: 2rem; flex: 1; }
   .intro-image { border-radius: 12px; overflow: hidden; margin-bottom: 2rem; box-shadow: var(--shadow-lg); }
   .intro-image img { width: 100%; height: 300px; object-fit: cover; }
@@ -565,7 +661,6 @@ const wizardStyles = `
   .intro-text p { margin: 0 0 1rem; }
   .intro-text p:last-child { margin-bottom: 0; }
   
-  /* Footer */
   .customer-footer { background: white; border-top: 1px solid var(--gray-200); padding: 1.5rem 2rem; text-align: center; }
   .footer-links { display: flex; justify-content: center; gap: 1rem; margin-bottom: 0.5rem; }
   .footer-links a { color: var(--gray-600); text-decoration: none; font-size: 0.875rem; }
@@ -573,7 +668,6 @@ const wizardStyles = `
   .footer-links span { color: var(--gray-300); }
   .footer-copyright { color: var(--gray-400); font-size: 0.8125rem; }
   
-  /* Wizard Progress */
   .wizard-progress { display: flex; align-items: center; justify-content: center; margin-bottom: 2rem; overflow-x: auto; padding-bottom: 0.5rem; }
   .wizard-step { display: flex; align-items: center; gap: 0.5rem; }
   .step-number { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.875rem; font-weight: 600; background: var(--gray-200); color: var(--gray-500); flex-shrink: 0; }
@@ -584,7 +678,6 @@ const wizardStyles = `
   .step-connector { width: 40px; height: 2px; background: var(--gray-200); margin: 0 0.5rem; flex-shrink: 0; }
   .step-connector.completed { background: var(--success); }
   
-  /* Wizard Content */
   .wizard-content { background: white; border-radius: 12px; box-shadow: var(--shadow-lg); padding: 2rem; }
   .option-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 1.5rem; margin: 1.5rem 0; }
   .option-card { position: relative; border: 2px solid var(--gray-200); border-radius: 8px; overflow: hidden; cursor: pointer; transition: all 0.2s; }
@@ -593,7 +686,7 @@ const wizardStyles = `
   .option-image-wrapper { position: relative; }
   .option-image { width: 100%; height: 160px; object-fit: cover; background: var(--gray-100); display: block; }
   .option-image-placeholder { display: flex; align-items: center; justify-content: center; color: var(--gray-400); height: 160px; background: var(--gray-100); }
-  .option-zoom-btn { position: absolute; bottom: 8px; right: 8px; width: 32px; height: 32px; background: rgba(255,255,255,0.9); border: none; border-radius: 6px; display: flex; align-items: center; justify-content: center; cursor: pointer; opacity: 0; transition: opacity 0.2s; }
+  .option-zoom-btn { position: absolute; bottom: 8px; right: 8px; width: 32px; height: 32px; background: rgba(255,255,255,0.9); border: none; border-radius: 6px; display: flex; align-items: center; justify-content: center; cursor: pointer; opacity: 0; transition: opacity 0.2s; z-index: 2; }
   .option-card:hover .option-zoom-btn { opacity: 1; }
   .option-zoom-btn:hover { background: white; }
   .option-content { padding: 1rem; }
@@ -602,9 +695,8 @@ const wizardStyles = `
   .option-info-btn:hover { border-color: var(--gs-red); color: var(--gs-red); }
   .option-description { font-size: 0.875rem; color: var(--gray-500); margin-bottom: 0.75rem; }
   .option-price { font-size: 1rem; font-weight: 600; }
-  .option-check { position: absolute; top: 0.75rem; right: 0.75rem; width: 28px; height: 28px; background: var(--gs-red); color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+  .option-check { position: absolute; top: 0.75rem; right: 0.75rem; width: 28px; height: 28px; background: var(--gs-red); color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; z-index: 3; }
   
-  /* Wizard Footer */
   .wizard-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid var(--gray-200); flex-wrap: wrap; gap: 1rem; }
   .wizard-footer-left { display: flex; align-items: center; gap: 1.5rem; }
   .wizard-total-label { color: var(--gray-500); font-size: 0.875rem; }
@@ -612,7 +704,6 @@ const wizardStyles = `
   .btn-save-draft { font-size: 0.8125rem; }
   .btn-save-draft.saved { color: var(--success); border-color: var(--success); }
   
-  /* Overview */
   .overview-list { border: 1px solid var(--gray-200); border-radius: 8px; overflow: hidden; }
   .overview-item { display: flex; align-items: center; padding: 1rem 1.25rem; border-bottom: 1px solid var(--gray-100); gap: 1rem; }
   .overview-item:last-child { border-bottom: none; }
@@ -625,8 +716,23 @@ const wizardStyles = `
   .overview-total-note { font-size: 0.8125rem; opacity: 0.7; }
   .overview-total-value { font-family: 'Space Grotesk', sans-serif; font-size: 1.5rem; font-weight: 700; }
   
-  /* Modals */
+  /* Gallery Modal */
+  .gallery-modal { max-width: 90vw; max-height: 95vh; display: flex; flex-direction: column; align-items: center; position: relative; }
+  .gallery-modal-close { position: absolute; top: -10px; right: -10px; background: rgba(255,255,255,0.15); border: none; color: white; cursor: pointer; padding: 8px; border-radius: 50%; z-index: 10; }
+  .gallery-modal-close:hover { background: rgba(255,255,255,0.3); }
+  .gallery-main { position: relative; max-width: 100%; max-height: 65vh; margin-bottom: 12px; }
+  .gallery-main img { max-width: 80vw; max-height: 65vh; object-fit: contain; border-radius: 8px; display: block; }
+  .gallery-nav { position: absolute; top: 50%; transform: translateY(-50%); background: rgba(0,0,0,0.5); border: none; color: white; cursor: pointer; padding: 8px; border-radius: 50%; }
+  .gallery-nav:hover { background: rgba(0,0,0,0.7); }
+  .gallery-nav-left { left: -20px; }
+  .gallery-nav-right { right: -20px; }
+  .gallery-thumbs { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; max-width: 80vw; }
+  .gallery-thumb { width: 60px; height: 45px; object-fit: cover; border-radius: 4px; cursor: pointer; border: 2px solid transparent; opacity: 0.6; transition: all 0.2s; }
+  .gallery-thumb:hover { opacity: 0.9; }
+  .gallery-thumb.active { border-color: white; opacity: 1; }
+  
   .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 1rem; }
+  .image-modal-overlay { background: rgba(0,0,0,0.85); }
   .info-modal { background: white; border-radius: 12px; max-width: 500px; width: 100%; max-height: 80vh; overflow: hidden; display: flex; flex-direction: column; }
   .info-modal-header { display: flex; justify-content: space-between; align-items: center; padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--gray-200); }
   .info-modal-header h3 { margin: 0; font-size: 1.125rem; }
@@ -635,12 +741,6 @@ const wizardStyles = `
   .info-modal-content { padding: 1.5rem; overflow-y: auto; color: var(--gray-600); line-height: 1.7; }
   .info-modal-content p { margin: 0 0 0.75rem; }
   .info-modal-content p:last-child { margin-bottom: 0; }
-  
-  .image-modal-overlay { background: rgba(0,0,0,0.85); }
-  .image-modal { position: relative; max-width: 90vw; max-height: 90vh; }
-  .image-modal img { max-width: 100%; max-height: 85vh; object-fit: contain; border-radius: 8px; }
-  .image-modal-close { position: absolute; top: -40px; right: 0; background: none; border: none; color: white; cursor: pointer; padding: 8px; }
-  .image-modal-close:hover { color: var(--gray-300); }
   
   .animate-spin { animation: spin 1s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
@@ -656,6 +756,9 @@ const wizardStyles = `
     .wizard-footer-left { justify-content: space-between; }
     .wizard-footer > div:last-child { display: flex; }
     .wizard-footer .btn { flex: 1; }
+    .gallery-main img { max-width: 95vw; }
+    .gallery-nav-left { left: 5px; }
+    .gallery-nav-right { right: 5px; }
   }
 `
 

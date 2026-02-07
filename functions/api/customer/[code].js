@@ -58,8 +58,25 @@ export async function onRequestGet(context) {
         ORDER BY sort_order ASC
       `).bind(cat.id).all()
 
-      // Standard-Optionen filtern (ausgeblendete entfernen)
-      const filteredOptions = optionsResult.results.filter(o => !hiddenIds.includes(o.id))
+      // Zusätzliche Bilder für alle Optionen dieser Kategorie laden
+      const optIds = optionsResult.results.map(o => o.id)
+      let additionalImages = []
+      if (optIds.length > 0) {
+        try {
+          const imgRes = await env.DB.prepare(`
+            SELECT * FROM option_images WHERE option_id IN (${optIds.join(',')}) ORDER BY sort_order ASC
+          `).all()
+          additionalImages = imgRes.results || []
+        } catch (e) { /* table may not exist yet */ }
+      }
+
+      // Standard-Optionen filtern (ausgeblendete entfernen) und Bilder zuordnen
+      const filteredOptions = optionsResult.results
+        .filter(o => !hiddenIds.includes(o.id))
+        .map(o => ({
+          ...o,
+          additional_images: additionalImages.filter(img => img.option_id === o.id)
+        }))
 
       // Individuelle Optionen für diese Kategorie hinzufügen
       const customOptions = customResult.results

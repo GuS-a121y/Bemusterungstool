@@ -97,6 +97,16 @@ CREATE TABLE IF NOT EXISTS apartment_custom_options (
     FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE
 );
 
+-- Zusätzliche Bilder pro Option (Hauptbild bleibt in options.image_url)
+CREATE TABLE IF NOT EXISTS option_images (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    option_id INTEGER NOT NULL,
+    image_url TEXT NOT NULL,
+    sort_order INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (option_id) REFERENCES options(id) ON DELETE CASCADE
+);
+
 -- Indizes für bessere Performance
 CREATE INDEX IF NOT EXISTS idx_apartments_project ON apartments(project_id);
 CREATE INDEX IF NOT EXISTS idx_apartments_code ON apartments(access_code);

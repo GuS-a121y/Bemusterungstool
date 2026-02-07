@@ -46,34 +46,36 @@ export async function onRequestGet(context) {
       WHERE s.apartment_id = ?
     `).bind(apartment.id).all()
 
-    // Für jede Selection die Details laden
+    // Für jede Selection die Details laden (inkl. Bild)
     const selectionDetails = []
     for (const sel of selections.results) {
       const cat = categories.results.find(c => c.id === sel.category_id)
       if (!cat) continue
 
-      let optionName, optionPrice, optionDescription, isCustom = false
+      let optionName, optionPrice, optionDescription, optionImage, isCustom = false
 
       if (sel.option_id < 0) {
         // Individuelle Option (negative ID)
         const customOpt = await env.DB.prepare(`
-          SELECT name, price, description FROM apartment_custom_options WHERE id = ?
+          SELECT name, price, description, image_url FROM apartment_custom_options WHERE id = ?
         `).bind(Math.abs(sel.option_id)).first()
         if (customOpt) {
           optionName = customOpt.name
           optionPrice = customOpt.price
           optionDescription = customOpt.description
+          optionImage = customOpt.image_url
           isCustom = true
         }
       } else {
         // Standard Option
         const opt = await env.DB.prepare(`
-          SELECT name, price, description FROM options WHERE id = ?
+          SELECT name, price, description, image_url FROM options WHERE id = ?
         `).bind(sel.option_id).first()
         if (opt) {
           optionName = opt.name
           optionPrice = opt.price
           optionDescription = opt.description
+          optionImage = opt.image_url
         }
       }
 
@@ -83,6 +85,7 @@ export async function onRequestGet(context) {
           option_name: optionName,
           option_price: optionPrice || 0,
           option_description: optionDescription,
+          option_image: optionImage || null,
           is_custom: isCustom
         })
       }
@@ -94,7 +97,7 @@ export async function onRequestGet(context) {
       totalPrice += s.option_price || 0
     })
 
-    // PDF als HTML generieren
+    // PDF als HTML generieren – completed_at für Datum verwenden
     const html = generatePDFHtml(apartment, selectionDetails, totalPrice)
 
     return new Response(html, {
@@ -110,24 +113,30 @@ export async function onRequestGet(context) {
 }
 
 function generatePDFHtml(apartment, selections, totalPrice) {
-  const now = new Date()
-  const date = now.toLocaleDateString('de-DE', { 
+  // Datum vom erstmaligen Absenden verwenden (completed_at), nicht aktuelles Datum
+  const completedDate = apartment.completed_at ? new Date(apartment.completed_at + 'Z') : new Date()
+  const date = completedDate.toLocaleDateString('de-DE', { 
     day: '2-digit', month: '2-digit', year: 'numeric' 
   })
-  const time = now.toLocaleTimeString('de-DE', { 
+  const time = completedDate.toLocaleTimeString('de-DE', { 
     hour: '2-digit', minute: '2-digit' 
   })
 
   const selectionRows = selections.map(s => `
     <tr>
-      <td style="padding: 12px; border-bottom: 1px solid #e5e7eb;">
+      <td style="padding: 12px; border-bottom: 1px solid #e5e7eb; vertical-align: top;">
         <strong>${s.category_name}</strong>
       </td>
-      <td style="padding: 12px; border-bottom: 1px solid #e5e7eb;">
-        ${s.option_name}
-        ${s.option_description ? `<br><span style="color: #6b7280; font-size: 12px;">${s.option_description}</span>` : ''}
+      <td style="padding: 12px; border-bottom: 1px solid #e5e7eb; vertical-align: top;">
+        <div style="display: flex; align-items: flex-start; gap: 12px;">
+          ${s.option_image ? `<img src="${s.option_image}" alt="${s.option_name}" style="width: 70px; height: 52px; object-fit: cover; border-radius: 4px; flex-shrink: 0; border: 1px solid #e5e7eb;" onerror="this.style.display='none'">` : ''}
+          <div>
+            ${s.option_name}
+            ${s.option_description ? `<br><span style="color: #6b7280; font-size: 12px;">${s.option_description}</span>` : ''}
+          </div>
+        </div>
       </td>
-      <td style="padding: 12px; border-bottom: 1px solid #e5e7eb; text-align: right; white-space: nowrap;">
+      <td style="padding: 12px; border-bottom: 1px solid #e5e7eb; text-align: right; white-space: nowrap; vertical-align: top;">
         ${s.option_price === 0 ? 'Inklusive' : (s.option_price > 0 ? '+' : '') + s.option_price.toLocaleString('de-DE') + ' €'}
       </td>
     </tr>
@@ -333,12 +342,11 @@ function generatePDFHtml(apartment, selections, totalPrice) {
           <div class="info-box">
             <div class="info-label">Kunde</div>
             <div class="info-value">${apartment.customer_name || '-'}</div>
-            ${apartment.customer_email ? `<div style="font-size: 13px; color: #6b7280; margin-top: 3px;">${apartment.customer_email}</div>` : ''}
           </div>
           <div class="info-box">
             <div class="info-label">Referenz</div>
             <div class="info-value" style="font-family: monospace; letter-spacing: 1px;">${apartment.access_code}</div>
-            <div style="font-size: 13px; color: #6b7280; margin-top: 3px;">Erstellt: ${date}, ${time} Uhr</div>
+            <div style="font-size: 13px; color: #6b7280; margin-top: 3px;">Abgesendet: ${date}, ${time} Uhr</div>
           </div>
         </div>
 
@@ -347,9 +355,9 @@ function generatePDFHtml(apartment, selections, totalPrice) {
         <table>
           <thead>
             <tr>
-              <th style="width: 28%;">Kategorie</th>
+              <th style="width: 25%;">Kategorie</th>
               <th>Gewählte Option</th>
-              <th style="width: 15%;">Mehrpreis</th>
+              <th style="width: 13%;">Mehrpreis</th>
             </tr>
           </thead>
           <tbody>
@@ -372,4 +380,3 @@ function generatePDFHtml(apartment, selections, totalPrice) {
 </body>
 </html>`
 }
-
